@@ -1,0 +1,6 @@
+fn get(id: u32) -> Customer:
+   let customer = dao.get(id)
+   customer.date_fetched = current_date
+
+fn add(customer: Customer):
+   dao.save(customer)

@@ -1,0 +1,5 @@
+fn get(id: u32) -> Customer:
+    select id, first_name, last_name from customers where id = :id
+
+fn save(c: Customer):
+    insert into customers values(id, first_name, last_name) values(:c.id, :c.first_name, :c.last_name)

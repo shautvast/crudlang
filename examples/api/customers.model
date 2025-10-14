@@ -1,0 +1,5 @@
+struct Customer:
+   id: u32,
+   first_name: string,
+   last_name: string,
+   date_fetched: date

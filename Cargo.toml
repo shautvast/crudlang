@@ -1,0 +1,21 @@
+[package]
+name = "crudlang"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.6"
+# log = "0.4"
+log4rs = "1.4.0"
+serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1.47", features = ["full"] }
+tokio-postgres = "0.7"
+chrono = "0.4.42"
+dotenv = "0.15.0"
+reqwest = { version = "0.12", features = ["json", "multipart"] }
+tower-http = { version = "0.6", features = ["fs"] }
+tower = "0.5.0"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.20"
+anyhow = "1.0"
+tower-livereload = "0.9.6"
