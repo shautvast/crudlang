@@ -1,0 +1,239 @@
+use crate::chunk::Chunk;
+use crate::opcode::{
+    OP_ADD, OP_CONSTANT, OP_DIVIDE, OP_MULTIPLY, OP_NEGATE, OP_RETURN, OP_SUBTRACT,
+};
+use crate::scanner::scan;
+use crate::tokens::TokenType::Print;
+use crate::tokens::{Token, TokenType};
+use crate::value::Value;
+use anyhow::anyhow;
+use std::collections::HashMap;
+use std::sync::LazyLock;
+
+pub fn compile(source: &str) -> anyhow::Result<Chunk> {
+    let tokens = scan(source);
+
+    let mut compiler = Compiler {
+        chunk: Chunk::new("main"),
+        previous_token: &tokens[0],
+        current_token: &tokens[0],
+        tokens: &tokens,
+        current: 0,
+        previous: 0,
+        had_error: false,
+    };
+    compiler.compile()
+}
+
+struct Compiler<'a> {
+    chunk: Chunk,
+    tokens: &'a Vec<Token>,
+    current: usize,
+    previous_token: &'a Token,
+    current_token: &'a Token,
+    previous: usize,
+    had_error: bool,
+}
+
+impl<'a> Compiler<'a> {
+    fn compile(mut self) -> anyhow::Result<Chunk> {
+        self.expression()?;
+        self.consume(TokenType::Eof, "Expect end of expression.")?;
+        self.emit_byte(OP_RETURN);
+        Ok(self.chunk)
+    }
+
+    fn advance(&mut self) -> anyhow::Result<()> {
+        if self.current < self.tokens.len() - 1 {
+            self.previous = self.current;
+            self.previous_token = &self.tokens[self.previous];
+            self.current += 1;
+            self.current_token = &self.tokens[self.current];
+        }
+        if let TokenType::Error = self.current_token.tokentype {
+            self.had_error = true;
+            Err(anyhow!(
+                "Error at {} on line {}",
+                self.current_token.lexeme,
+                self.current_token.line
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn consume(&mut self, token_type: TokenType, message: &str) -> anyhow::Result<()> {
+        if token_type == self.current_token.tokentype {
+            self.advance()
+        } else {
+            Err(anyhow!("{}", message))
+        }
+    }
+
+    fn expression(&mut self) -> anyhow::Result<()> {
+        self.parse_precedence(PREC_ASSIGNMENT)?;
+        Ok(())
+    }
+
+    fn parse_precedence(&mut self, precedence: usize) -> anyhow::Result<()> {
+        self.advance()?;
+        let prefix_rule = get_rule(&self.previous_token.tokentype).prefix;
+        if let Some(prefix) = prefix_rule {
+            prefix(self)?;
+            while precedence <= get_rule(&self.current_token.tokentype).precedence {
+                self.advance()?;
+                let infix_rule = get_rule(&self.previous_token.tokentype).infix;
+                if let Some(infix) = infix_rule {
+                    infix(self)?;
+                }
+            }
+        } else {
+            return Err(anyhow!("Expect expression."));
+        }
+        Ok(())
+    }
+
+    fn emit_byte(&mut self, byte: u16) {
+        self.chunk.add(byte, self.previous_token.line);
+    }
+
+    fn emit_bytes(&mut self, b1: u16, b2: u16) {
+        self.emit_byte(b1);
+        self.emit_byte(b2);
+    }
+
+    fn emit_constant(&mut self, value: Value) {
+        let index = self.chunk.add_constant(value);
+        self.emit_bytes(OP_CONSTANT, index as u16);
+    }
+}
+
+type ParseFn = fn(&mut Compiler) -> anyhow::Result<()>;
+
+struct Rule {
+    prefix: Option<ParseFn>,
+    infix: Option<ParseFn>,
+    precedence: usize,
+}
+
+impl Rule {
+    fn new(prefix: Option<ParseFn>, infix: Option<ParseFn>, precedence: usize) -> Self {
+        Self {
+            prefix,
+            infix,
+            precedence,
+        }
+    }
+}
+
+fn number(s: &mut Compiler) -> anyhow::Result<()> {
+    let tt = s.previous_token.tokentype;
+    let value = s.previous_token.lexeme.clone();
+    s.emit_constant(match tt {
+        TokenType::Number => Value::F64(value.parse().unwrap()),
+        _ => unimplemented!(), // TODO numeric types
+    });
+    Ok(())
+}
+
+fn grouping(s: &mut Compiler) -> anyhow::Result<()> {
+    s.expression()?;
+    s.consume(TokenType::RightParen, "Expect ')' after expression.")
+}
+
+fn unary(s: &mut Compiler) -> anyhow::Result<()> {
+    let operator_type = s.previous_token.tokentype;
+
+    s.parse_precedence(PREC_UNARY)?;
+
+    match operator_type {
+        TokenType::Minus => {
+            s.emit_byte(OP_NEGATE);
+        }
+        _ => unimplemented!("unary other than minus"),
+    }
+    Ok(())
+}
+
+fn binary(s: &mut Compiler) -> anyhow::Result<()> {
+    let operator_type = &s.previous_token.tokentype;
+    let rule = get_rule(operator_type);
+    s.parse_precedence(rule.precedence + 1)?;
+    match operator_type {
+        TokenType::Plus => s.emit_byte(OP_ADD),
+        TokenType::Minus => s.emit_byte(OP_SUBTRACT),
+        TokenType::Star => s.emit_byte(OP_MULTIPLY),
+        TokenType::Slash => s.emit_byte(OP_DIVIDE),
+        _ => unimplemented!("binary other than plus, minus, star, slash"),
+    }
+    Ok(())
+}
+
+fn get_rule(operator_type: &TokenType) -> &'static Rule {
+    RULES.get(operator_type).unwrap()
+}
+
+static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
+    let mut rules: HashMap<TokenType, Rule> = HashMap::new();
+    rules.insert(
+        TokenType::LeftParen,
+        Rule::new(Some(binary), None, PREC_NONE),
+    );
+    rules.insert(TokenType::RightParen, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::LeftBrace, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::RightBrace, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::LeftBracket, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::RightBracket, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Comma, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Dot, Rule::new(None, None, PREC_NONE));
+    rules.insert(
+        TokenType::Minus,
+        Rule::new(Some(unary), Some(binary), PREC_TERM),
+    );
+    rules.insert(TokenType::Plus, Rule::new(None, Some(binary), PREC_TERM));
+    rules.insert(TokenType::Colon, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Slash, Rule::new(None, Some(binary), PREC_FACTOR));
+    rules.insert(TokenType::Star, Rule::new(None, Some(binary), PREC_FACTOR));
+    rules.insert(TokenType::Bang, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::BangEqual, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Equal, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::EqualEqual, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Greater, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::GreaterEqual, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Less, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::LessEqual, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Identifier, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::String, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Number, Rule::new(Some(number), None, PREC_NONE));
+    rules.insert(TokenType::And, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Fn, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Struct, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Else, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::False, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::True, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Or, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::While, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Print, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Return, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Eof, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::U32Type, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::U64Type, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::I32Type, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::I64Type, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::DateType, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::StringType, Rule::new(None, None, PREC_NONE));
+
+    rules
+});
+
+const PREC_NONE: usize = 0;
+const PREC_ASSIGNMENT: usize = 1;
+const PREC_OR: usize = 2;
+const PREC_AND: usize = 3;
+const PREC_EQUALITY: usize = 4;
+const PREC_COMPARISON: usize = 5;
+const PREC_TERM: usize = 6;
+const PREC_FACTOR: usize = 7;
+const PREC_UNARY: usize = 8;
+const PREC_CALL: usize = 9;
+const PREC_PRIMARY: usize = 10;

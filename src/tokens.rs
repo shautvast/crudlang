@@ -1,8 +1,8 @@
 #[derive(Debug)]
-pub(crate) struct Token {
-    tokentype: TokenType,
-    lexeme: String,
-    line: usize,
+pub struct Token {
+    pub tokentype: TokenType,
+    pub lexeme: String,
+    pub line: usize,
 }
 
 impl Token {
@@ -20,8 +20,9 @@ enum Value {
     None,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone, Copy, Hash)]
 pub(crate) enum TokenType {
+    Error,
     LeftParen,
     RightParen,
     LeftBrace,
@@ -48,6 +49,28 @@ pub(crate) enum TokenType {
     Identifier,
     String,
     Number,
+    And,
     Fn,
     Struct,
+    Else,
+    False,
+    True,
+    Null,
+    If,
+    Or,
+    While,
+    For,
+    Return,
+    Print,
+    Eof,
+    U32Type,
+    U64Type,
+    I32Type,
+    I64Type,
+    DateType,
+    StringType,
+}
+
+impl Eq for TokenType {
+
 }
