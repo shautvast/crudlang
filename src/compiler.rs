@@ -1,9 +1,6 @@
 use crate::chunk::Chunk;
-use crate::opcode::{
-    OP_ADD, OP_CONSTANT, OP_DIVIDE, OP_MULTIPLY, OP_NEGATE, OP_RETURN, OP_SUBTRACT,
-};
+use crate::opcode::{OP_ADD, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY, OP_NEGATE, OP_RETURN, OP_SUBTRACT, OP_TRUE};
 use crate::scanner::scan;
-use crate::tokens::TokenType::Print;
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use anyhow::anyhow;
@@ -136,6 +133,15 @@ fn number(s: &mut Compiler) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn literal(s: &mut Compiler) -> anyhow::Result<()>{
+    match s.previous_token.tokentype {
+        TokenType::False => s.emit_byte(OP_FALSE),
+        TokenType::True => s.emit_byte(OP_TRUE),
+        _ =>{}
+    }
+    Ok(())
+}
+
 fn grouping(s: &mut Compiler) -> anyhow::Result<()> {
     s.expression()?;
     s.consume(TokenType::RightParen, "Expect ')' after expression.")
@@ -222,6 +228,8 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     rules.insert(TokenType::I64Type, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::DateType, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::StringType, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::False, Rule::new(Some(literal), None, PREC_NONE));
+    rules.insert(TokenType::True, Rule::new(Some(literal), None, PREC_NONE));
 
     rules
 });

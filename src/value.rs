@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use chrono::Utc;
 use std::collections::HashMap;
 use std::ops::{Add, Div, Mul, Neg, Sub};
@@ -91,95 +92,95 @@ impl Into<Value> for HashMap<Value, Value> {
     }
 }
 
-impl Neg for Value {
-    type Output = Value;
+impl Neg for &Value {
+    type Output = anyhow::Result<Value>;
 
     fn neg(self) -> Self::Output {
         match self {
-            Value::I32(i) => Value::I32(-i),
-            Value::I64(i) => Value::I64(-i),
-            Value::F32(i) => Value::F32(-i),
-            Value::F64(i) => Value::F64(-i),
-            _ => panic!("Cannot negate {:?}", self),
+            Value::I32(i) => Ok(Value::I32(-i)),
+            Value::I64(i) => Ok(Value::I64(-i)),
+            Value::F32(i) => Ok(Value::F32(-i)),
+            Value::F64(i) => Ok(Value::F64(-i)),
+            _ => Err(anyhow!("Cannot negate")),
         }
     }
 }
 
-impl Add<Value> for Value {
-    type Output = Value;
+impl Add<&Value> for &Value {
+    type Output = anyhow::Result<Value>;
 
-    fn add(self, rhs: Value) -> Self::Output {
+    fn add(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
-            (Value::I32(a), Value::I32(b)) => Value::I32(a + b),
-            (Value::I64(a), Value::I64(b)) => Value::I64(a + b),
-            (Value::U32(a), Value::U32(b)) => Value::U32(a + b),
-            (Value::U64(a), Value::U64(b)) => Value::U64(a + b),
-            (Value::F32(a), Value::F32(b)) => Value::F32(a + b),
-            (Value::F64(a), Value::F64(b)) => Value::F64(a + b),
-            (Value::String(s), Value::I32(i)) => Value::String(format!("{}{}", s, i)),
-            (Value::String(s), Value::I64(i)) => Value::String(format!("{}{}", s, i)),
-            (Value::String(s), Value::U32(u)) => Value::String(format!("{}{}", s, u)),
-            (Value::String(s), Value::U64(u)) => Value::String(format!("{}{}", s, u)),
-            (Value::String(s), Value::F32(f)) => Value::String(format!("{}{}", s, f)),
-            (Value::String(s), Value::F64(f)) => Value::String(format!("{}{}", s, f)),
-            (Value::String(s), Value::Bool(b)) => Value::String(format!("{}{}", s, b)),
-            (Value::String(s), Value::Char(c)) => Value::String(format!("{}{}", s, c)),
-            (Value::String(s1), Value::String(s2)) => Value::String(format!("{}{}", s1, s2)),
-            (Value::String(s1), Value::List(l)) => Value::String(format!("{}{:?}", s1, l)),
-            (Value::String(s1), Value::Map(m)) => Value::String(format!("{}{:?}", s1, m)),
+            (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a + b)),
+            (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a + b)),
+            (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a + b)),
+            (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a + b)),
+            (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a + b)),
+            (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a + b)),
+            (Value::String(s), Value::I32(i)) => Ok(Value::String(format!("{}{}", s, i))),
+            (Value::String(s), Value::I64(i)) => Ok(Value::String(format!("{}{}", s, i))),
+            (Value::String(s), Value::U32(u)) => Ok(Value::String(format!("{}{}", s, u))),
+            (Value::String(s), Value::U64(u)) => Ok(Value::String(format!("{}{}", s, u))),
+            (Value::String(s), Value::F32(f)) => Ok(Value::String(format!("{}{}", s, f))),
+            (Value::String(s), Value::F64(f)) => Ok(Value::String(format!("{}{}", s, f))),
+            (Value::String(s), Value::Bool(b)) => Ok(Value::String(format!("{}{}", s, b))),
+            (Value::String(s), Value::Char(c)) => Ok(Value::String(format!("{}{}", s, c))),
+            (Value::String(s1), Value::String(s2)) => Ok(Value::String(format!("{}{}", s1, s2))),
+            (Value::String(s1), Value::List(l)) => Ok(Value::String(format!("{}{:?}", s1, l))),
+            (Value::String(s1), Value::Map(m)) => Ok(Value::String(format!("{}{:?}", s1, m))),
             //enum?
-            _ => panic!("Cannot add"),
+            _ => Err(anyhow!("Cannot add")),
         }
     }
 }
 
-impl Sub<Value> for Value {
-    type Output = Value;
+impl Sub<&Value> for &Value {
+    type Output = anyhow::Result<Value>;
 
-    fn sub(self, rhs: Value) -> Self::Output {
+    fn sub(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
-            (Value::I32(a), Value::I32(b)) => Value::I32(a - b),
-            (Value::I64(a), Value::I64(b)) => Value::I64(a - b),
-            (Value::U32(a), Value::U32(b)) => Value::U32(a - b),
-            (Value::U64(a), Value::U64(b)) => Value::U64(a - b),
-            (Value::F32(a), Value::F32(b)) => Value::F32(a - b),
-            (Value::F64(a), Value::F64(b)) => Value::F64(a - b),
+            (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a - b)),
+            (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a - b)),
+            (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a - b)),
+            (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a - b)),
+            (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a - b)),
+            (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a - b)),
             //enum?
-            _ => panic!("Cannot subtract"),
+            _ => Err(anyhow!("Cannot subtract")),
         }
     }
 }
 
-impl Mul<Value> for Value {
-    type Output = Value;
+impl Mul<&Value> for &Value {
+    type Output = anyhow::Result<Value>;
 
-    fn mul(self, rhs: Value) -> Self::Output {
+    fn mul(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
-            (Value::I32(a), Value::I32(b)) => Value::I32(a * b),
-            (Value::I64(a), Value::I64(b)) => Value::I64(a * b),
-            (Value::U32(a), Value::U32(b)) => Value::U32(a * b),
-            (Value::U64(a), Value::U64(b)) => Value::U64(a * b),
-            (Value::F32(a), Value::F32(b)) => Value::F32(a * b),
-            (Value::F64(a), Value::F64(b)) => Value::F64(a * b),
+            (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a * b)),
+            (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a * b)),
+            (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a * b)),
+            (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a * b)),
+            (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a * b)),
+            (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a * b)),
             //enum?
-            _ => panic!("Cannot multiply"),
+            _ => Err(anyhow!("Cannot multiply")),
         }
     }
 }
 
-impl Div<Value> for Value {
-    type Output = Value;
+impl Div<&Value> for &Value {
+    type Output = anyhow::Result<Value>;
 
-    fn div(self, rhs: Value) -> Self::Output {
+    fn div(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
-            (Value::I32(a), Value::I32(b)) => Value::I32(a / b),
-            (Value::I64(a), Value::I64(b)) => Value::I64(a / b),
-            (Value::U32(a), Value::U32(b)) => Value::U32(a / b),
-            (Value::U64(a), Value::U64(b)) => Value::U64(a / b),
-            (Value::F32(a), Value::F32(b)) => Value::F32(a / b),
-            (Value::F64(a), Value::F64(b)) => Value::F64(a / b),
+            (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a / b)),
+            (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a / b)),
+            (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a / b)),
+            (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a / b)),
+            (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a / b)),
+            (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a / b)),
             //enum?
-            _ => panic!("Cannot divide"),
+            _ => Err(anyhow!("Cannot divide")),
         }
     }
 }
