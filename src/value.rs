@@ -128,7 +128,7 @@ impl Add<&Value> for &Value {
             (Value::String(s), Value::F64(f)) => Ok(Value::String(format!("{}{}", s, f))),
             (Value::String(s), Value::Bool(b)) => Ok(Value::String(format!("{}{}", s, b))),
             (Value::String(s), Value::Char(c)) => Ok(Value::String(format!("{}{}", s, c))),
-            (Value::String(s1), Value::String(s2)) => Ok(Value::String(format!("{}{}", s1, s2))),
+            (Value::String(s1), Value::String(s2)) => Ok(Value::String(format!("{}{}", s2, s1))),
             (Value::String(s1), Value::List(l)) => Ok(Value::String(format!("{}{:?}", s1, l))),
             (Value::String(s1), Value::Map(m)) => Ok(Value::String(format!("{}{:?}", s1, m))),
             //enum?

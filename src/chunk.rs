@@ -85,6 +85,6 @@ impl Chunk {
     }
 
     fn print_value(&self, value: &Value) {
-        println!("'{:?}'", value);
+        println!("{:?}", value);
     }
 }

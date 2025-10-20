@@ -10,7 +10,7 @@ use tracing::debug;
 
 pub fn compile(source: &str) -> anyhow::Result<Chunk> {
     let tokens = scan(source);
-    // println!("{:?}", tokens);
+    debug!("Scanned tokens: {:?}", tokens);
 
     let mut compiler = Compiler {
         chunk: Chunk::new("main"),
@@ -77,7 +77,7 @@ impl<'a> Compiler<'a> {
     fn parse_precedence(&mut self, precedence: usize) -> anyhow::Result<()> {
         self.advance()?;
         let rule = get_rule(&self.previous_token.tokentype);
-        debug!("{:?}",rule);
+        debug!("Precedence rule: {:?}",rule);
         if let Some(prefix) = rule.prefix {
             prefix(self)?;
             while precedence <= get_rule(&self.current_token.tokentype).precedence {
@@ -141,6 +141,7 @@ fn literal(s: &mut Compiler) -> anyhow::Result<()> {
     match s.previous_token.tokentype {
         TokenType::False => s.emit_byte(OP_FALSE),
         TokenType::True => s.emit_byte(OP_TRUE),
+        TokenType::String => s.emit_constant(Value::String(s.previous_token.lexeme.clone())),
         _ => {}
     }
     Ok(())
@@ -170,7 +171,7 @@ fn unary(s: &mut Compiler) -> anyhow::Result<()> {
 
 fn binary(s: &mut Compiler) -> anyhow::Result<()> {
     let operator_type = &s.previous_token.tokentype;
-    debug!("{:?}",operator_type);
+    debug!("operator {:?}",operator_type);
     let rule = get_rule(operator_type);
     s.parse_precedence(rule.precedence + 1)?;
     match operator_type {
@@ -225,7 +226,7 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     rules.insert(TokenType::LessEqual, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::LessLess, Rule::new(None, Some(binary), PREC_BITSHIFT));
     rules.insert(TokenType::Identifier, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::String, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::String, Rule::new(Some(literal), None, PREC_NONE));
     rules.insert(TokenType::Number, Rule::new(Some(number), None, PREC_NONE));
     rules.insert(TokenType::LogicalAnd, Rule::new(None, Some(binary), PREC_AND));
     rules.insert(TokenType::LogicalOr, Rule::new(None, Some(binary), PREC_OR));

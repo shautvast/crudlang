@@ -1,8 +1,8 @@
 
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
-    
-    let chunk = crudlang::compiler::compile("3<<2")?;
+
+    let chunk = crudlang::compiler::compile("\"a\"+\"b\"")?;
     chunk.disassemble();
 
     let result = crudlang::vm::interpret(chunk);
