@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use chrono::Utc;
 use std::collections::HashMap;
-use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Sub};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -19,6 +19,7 @@ pub enum Value {
     Struct,
     List(Vec<Value>),
     Map(HashMap<Value, Value>),
+    Error(String),
 }
 
 impl Into<Value> for i32 {
@@ -179,8 +180,46 @@ impl Div<&Value> for &Value {
             (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a / b)),
             (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a / b)),
             (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a / b)),
-            //enum?
             _ => Err(anyhow!("Cannot divide")),
+        }
+    }
+}
+
+impl BitAnd<&Value> for &Value {
+    type Output = anyhow::Result<Value>;
+    fn bitand(self, rhs: &Value) -> Self::Output {
+        match (self, rhs) {
+            (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a & b)),
+            (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a & b)),
+            (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a & b)),
+            (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a & b)),
+            _ => Err(anyhow!("Cannot do bitwise-and on")),
+        }
+    }
+}
+
+impl BitOr<&Value> for &Value {
+    type Output = anyhow::Result<Value>;
+    fn bitor(self, rhs: &Value) -> Self::Output {
+        match (self, rhs) {
+            (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a | b)),
+            (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a | b)),
+            (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a | b)),
+            (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a | b)),
+            _ => Err(anyhow!("Cannot do bitwise-or on")),
+        }
+    }
+}
+
+impl BitXor<&Value> for &Value {
+    type Output = anyhow::Result<Value>;
+    fn bitxor(self, rhs: &Value) -> Self::Output {
+        match (self, rhs) {
+            (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a ^ b)),
+            (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a ^ b)),
+            (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a ^ b)),
+            (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a ^ b)),
+            _ => Err(anyhow!("Cannot do bitwise-xor on")),
         }
     }
 }

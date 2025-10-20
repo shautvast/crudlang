@@ -1,8 +1,6 @@
+use anyhow::anyhow;
+use tracing::debug;
 use crate::chunk::Chunk;
-use crate::opcode::{
-    OP_ADD, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY, OP_NEGATE, OP_RETURN, OP_SUBTRACT,
-    OP_TRUE,
-};
 use crate::value::Value;
 
 pub mod chunk;
@@ -31,11 +29,11 @@ pub struct Vm {
 impl Vm {
     fn run(&mut self) -> Result {
         loop {
-            print!("[");
+            debug!("[");
             for value in self.stack.iter() {
-                print!("{:?} ", value);
+                debug!("{:?} ", value);
             }
-            println!("]");
+            debug!("]");
             let opcode = self.chunk.code[self.ip];
             self.ip += 1;
             match opcode {
@@ -46,21 +44,32 @@ impl Vm {
                 }
                 OP_FALSE => self.push(Value::Bool(false)),
                 OP_TRUE => self.push(Value::Bool(true)),
-                OP_ADD => binary_op(self, add),
-                OP_SUBTRACT => binary_op(self, sub),
-                OP_MULTIPLY => binary_op(self, mul),
-                OP_DIVIDE => binary_op(self, div),
-                OP_NEGATE => {
-                    let value = &self.pop();
-                    let result = -value;
-                    match result {
-                        Ok(result) => self.push(result),
-                        Err(e) => panic!("Error: {:?} {:?}", e, value),
+                OP_ADD => binary_op(self, |a, b| a + b),
+                OP_SUBTRACT => binary_op(self, |a, b| a - b),
+                OP_MULTIPLY => binary_op(self, |a, b| a * b),
+                OP_DIVIDE => binary_op(self, |a, b| a / b),
+                OP_AND => binary_op(self, |a, b| {
+                    if let (Value::Bool(a), Value::Bool(b)) = (a, b) {
+                        Ok(Value::Bool(*a && *b))
+                    } else {
+                        Err(anyhow!("Cannot and"))
                     }
-                }
+                }),
+                OP_OR => binary_op(self, |a, b| {
+                    if let (Value::Bool(a), Value::Bool(b)) = (a, b) {
+                        Ok(Value::Bool(*a || *b))
+                    } else {
+                        Err(anyhow!("Cannot compare"))
+                    }
+                }),
+                OP_NOT => {}
+                OP_BITAND => binary_op(self, bitand),
+                OP_BITOR => binary_op(self, |a, b| a | b),
+                OP_BITXOR => binary_op(self, |a, b| a ^ b),
+                OP_NEGATE => unary_op(self, |a| -a),
                 OP_RETURN => {
-                    println!("return {:?}", self.pop());
-                    return Result::Ok;
+                    // println!("{:?}", self.pop());
+                    return Result::Ok(self.pop());
                 }
                 _ => {}
             }
@@ -76,36 +85,61 @@ impl Vm {
     }
 
     fn pop(&mut self) -> Value {
-        self.stack.pop().unwrap() //?
+        self.stack.pop().unwrap_or_else(|| Value::Error("Error occurred".to_string()))
     }
 }
 
-fn binary_op(stack: &mut Vm, op: impl Fn(&Value, &Value) -> anyhow::Result<Value> + Copy) {
-    let a = stack.pop();
-    let b = stack.pop();
+fn binary_op(vm: &mut Vm, op: impl Fn(&Value, &Value) -> anyhow::Result<Value> + Copy) {
+    let a = vm.pop();
+    let b = vm.pop();
+
     let result = op(&a, &b);
     match result {
-        Ok(result) => stack.push(result),
-        Err(e) => panic!("Error: {:?} {:?} and {:?}", e, a, b),
+        Ok(result) => vm.push(result),
+        Err(e) => println!("Error: {} {:?} and {:?}", e.to_string(), a, b),
     }
 }
 
-fn add(a: &Value, b: &Value) -> anyhow::Result<Value> {
-    a + b
-}
-fn sub(a: &Value, b: &Value) -> anyhow::Result<Value> {
-    a - b
-}
-fn mul(a: &Value, b: &Value) -> anyhow::Result<Value> {
-    a * b
-}
-fn div(a: &Value, b: &Value) -> anyhow::Result<Value> {
-    a / b
+fn unary_op(stack: &mut Vm, op: impl Fn(&Value) -> anyhow::Result<Value> + Copy) {
+    let a = stack.pop();
+    let result = op(&a);
+    match result {
+        Ok(result) => stack.push(result),
+        Err(e) => panic!("Error: {:?} {:?}", e, a),
+    }
 }
 
-#[derive(Debug, PartialEq)]
+
+fn bitand(a: &Value, b: &Value) -> anyhow::Result<Value> {
+    a& b
+}
+
+#[derive(Debug)]
 pub enum Result {
-    Ok,
+    Ok(Value),
     CompileError,
     Error,
 }
+
+pub const OP_CONSTANT: u16 = 1;
+pub const OP_ADD: u16 = 2;
+pub const OP_SUBTRACT: u16 = 3;
+pub const OP_MULTIPLY: u16 = 4;
+pub const OP_DIVIDE: u16 = 5;
+pub const OP_NEGATE: u16 = 6;
+pub const OP_PRINT: u16 = 7;
+pub const OP_RETURN: u16 = 8;
+pub const OP_TRUE: u16 = 9;
+pub const OP_FALSE: u16 = 10;
+pub const OP_AND: u16 = 11;
+pub const OP_OR: u16 = 12;
+pub const OP_NOT: u16 = 13;
+pub const OP_EQUAL: u16 = 14;
+pub const OP_GREATER: u16 = 15;
+pub const OP_LESS: u16 = 16;
+pub const OP_NOT_EQUAL: u16 = 17;
+pub const OP_GREATER_EQUAL: u16 = 18;
+pub const OP_LESS_EQUAL: u16 = 19;
+pub const OP_BITAND: u16 = 20;
+pub const OP_BITOR: u16 = 21;
+pub const OP_BITXOR: u16 = 22;

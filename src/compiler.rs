@@ -1,14 +1,16 @@
 use crate::chunk::Chunk;
-use crate::opcode::{OP_ADD, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY, OP_NEGATE, OP_RETURN, OP_SUBTRACT, OP_TRUE};
 use crate::scanner::scan;
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
+use crate::{OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY, OP_NEGATE, OP_RETURN, OP_SUBTRACT, OP_TRUE};
 use anyhow::anyhow;
 use std::collections::HashMap;
 use std::sync::LazyLock;
+use tracing::debug;
 
 pub fn compile(source: &str) -> anyhow::Result<Chunk> {
     let tokens = scan(source);
+    // println!("{:?}", tokens);
 
     let mut compiler = Compiler {
         chunk: Chunk::new("main"),
@@ -74,8 +76,9 @@ impl<'a> Compiler<'a> {
 
     fn parse_precedence(&mut self, precedence: usize) -> anyhow::Result<()> {
         self.advance()?;
-        let prefix_rule = get_rule(&self.previous_token.tokentype).prefix;
-        if let Some(prefix) = prefix_rule {
+        let rule = get_rule(&self.previous_token.tokentype);
+        debug!("{:?}",rule);
+        if let Some(prefix) = rule.prefix {
             prefix(self)?;
             while precedence <= get_rule(&self.current_token.tokentype).precedence {
                 self.advance()?;
@@ -107,6 +110,7 @@ impl<'a> Compiler<'a> {
 
 type ParseFn = fn(&mut Compiler) -> anyhow::Result<()>;
 
+#[derive(Debug)]
 struct Rule {
     prefix: Option<ParseFn>,
     infix: Option<ParseFn>,
@@ -133,11 +137,11 @@ fn number(s: &mut Compiler) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn literal(s: &mut Compiler) -> anyhow::Result<()>{
+fn literal(s: &mut Compiler) -> anyhow::Result<()> {
     match s.previous_token.tokentype {
         TokenType::False => s.emit_byte(OP_FALSE),
         TokenType::True => s.emit_byte(OP_TRUE),
-        _ =>{}
+        _ => {}
     }
     Ok(())
 }
@@ -163,6 +167,7 @@ fn unary(s: &mut Compiler) -> anyhow::Result<()> {
 
 fn binary(s: &mut Compiler) -> anyhow::Result<()> {
     let operator_type = &s.previous_token.tokentype;
+    debug!("{:?}",operator_type);
     let rule = get_rule(operator_type);
     s.parse_precedence(rule.precedence + 1)?;
     match operator_type {
@@ -170,12 +175,16 @@ fn binary(s: &mut Compiler) -> anyhow::Result<()> {
         TokenType::Minus => s.emit_byte(OP_SUBTRACT),
         TokenType::Star => s.emit_byte(OP_MULTIPLY),
         TokenType::Slash => s.emit_byte(OP_DIVIDE),
+        TokenType::BitAnd => s.emit_byte(OP_BITAND),
+        TokenType::BitOr => s.emit_byte(OP_BITOR),
+        TokenType::BitXor => s.emit_byte(OP_BITXOR),
         _ => unimplemented!("binary other than plus, minus, star, slash"),
     }
     Ok(())
 }
 
 fn get_rule(operator_type: &TokenType) -> &'static Rule {
+    debug!("{:?}", operator_type);
     RULES.get(operator_type).unwrap()
 }
 
@@ -211,13 +220,16 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     rules.insert(TokenType::Identifier, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::String, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Number, Rule::new(Some(number), None, PREC_NONE));
-    rules.insert(TokenType::And, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::LogicalAnd, Rule::new(None, Some(binary), PREC_AND));
+    rules.insert(TokenType::LogicalOr, Rule::new(None, Some(binary), PREC_OR));
+    rules.insert(TokenType::BitAnd, Rule::new(None, Some(binary), PREC_BITAND));
+    rules.insert(TokenType::BitOr, Rule::new(None, Some(binary), PREC_BITOR));
+    rules.insert(TokenType::BitXor, Rule::new(None, Some(binary), PREC_BITXOR));
     rules.insert(TokenType::Fn, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Struct, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Else, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::False, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::True, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::Or, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::While, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Print, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Return, Rule::new(None, None, PREC_NONE));
@@ -230,6 +242,7 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     rules.insert(TokenType::StringType, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::False, Rule::new(Some(literal), None, PREC_NONE));
     rules.insert(TokenType::True, Rule::new(Some(literal), None, PREC_NONE));
+    rules.insert(TokenType::Indent, Rule::new(None, None, PREC_NONE));
 
     rules
 });
@@ -238,10 +251,14 @@ const PREC_NONE: usize = 0;
 const PREC_ASSIGNMENT: usize = 1;
 const PREC_OR: usize = 2;
 const PREC_AND: usize = 3;
-const PREC_EQUALITY: usize = 4;
-const PREC_COMPARISON: usize = 5;
-const PREC_TERM: usize = 6;
-const PREC_FACTOR: usize = 7;
-const PREC_UNARY: usize = 8;
-const PREC_CALL: usize = 9;
-const PREC_PRIMARY: usize = 10;
+const PREC_BITAND: usize = 4;
+const PREC_BITOR: usize = 5;
+const PREC_BITXOR: usize = 6;
+const PREC_EQUALITY: usize = 7;
+const PREC_COMPARISON: usize = 8;
+const PREC_BITSHIFT: usize = 9;
+const PREC_TERM: usize = 10;
+const PREC_FACTOR: usize = 11;
+const PREC_UNARY: usize = 12;
+const PREC_CALL: usize = 13;
+const PREC_PRIMARY: usize = 14;

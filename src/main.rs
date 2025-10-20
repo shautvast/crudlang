@@ -16,11 +16,10 @@ fn main() -> anyhow::Result<()> {
     // chunk.add(crudlang::opcode::OP_ADD, 123);
     //
     // chunk.add(crudlang::opcode::OP_RETURN, 123);
-    let chunk = compile("-true")?;
+    let chunk = compile("1&3")?;
     chunk.disassemble();
 
     let result = interpret(chunk);
-    println!("{:?}",result);
     Ok(())
 }
 

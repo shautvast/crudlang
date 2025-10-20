@@ -5,6 +5,7 @@ use crate::{
         TokenType::{self},
     },
 };
+use crate::tokens::TokenType::BitXor;
 
 pub fn scan(source: &str) -> Vec<Token> {
     let scanner = Scanner {
@@ -98,6 +99,23 @@ impl Scanner {
                     self.line += 1;
                     self.new_line = true;
                 }
+                '&' => {
+                    let t = if self.match_next('&') {
+                        TokenType::LogicalAnd
+                    } else {
+                        TokenType::BitAnd
+                    };
+                    self.add_token(t);
+                }
+                '|' => {
+                    let t = if self.match_next('|') {
+                        TokenType::LogicalOr
+                    } else {
+                        TokenType::BitOr
+                    };
+                    self.add_token(t);
+                }
+                '^' => self.add_token(BitXor),
                 _ => {
                     if is_digit(c) {
                         self.number();

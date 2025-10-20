@@ -1,5 +1,9 @@
-use crate::opcode::{OP_CONSTANT, OP_RETURN, OP_NEGATE, OP_ADD, OP_SUBTRACT, OP_MULTIPLY, OP_DIVIDE};
+use tracing::debug;
 use crate::value::Value;
+use crate::{
+    OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY,
+    OP_NEGATE, OP_RETURN, OP_SUBTRACT, OP_TRUE,
+};
 
 pub struct Chunk {
     name: String,
@@ -34,7 +38,7 @@ impl Chunk {
         while offset < self.code.len() {
             offset = self.disassemble_inst(offset);
         }
-        println!("== {} ==", self.name);
+        println!();
     }
 
     fn disassemble_inst(&self, offset: usize) -> usize {
@@ -48,9 +52,12 @@ impl Chunk {
         match instruction {
             OP_CONSTANT => self.constant_inst("OP_CONSTANT", offset),
             OP_ADD => self.simple_inst("OP_ADD", offset),
+            OP_FALSE => self.simple_inst("OP_FALSE", offset),
+            OP_TRUE => self.simple_inst("OP_TRUE", offset),
             OP_SUBTRACT => self.simple_inst("OP_SUBTRACT", offset),
             OP_MULTIPLY => self.simple_inst("OP_MULTIPLY", offset),
             OP_DIVIDE => self.simple_inst("OP_DIVIDE", offset),
+            OP_BITAND => self.simple_inst("OP_BITAND", offset),
             OP_NEGATE => self.simple_inst("OP_NEGATE", offset),
             OP_RETURN => self.simple_inst("OP_RETURN", offset),
             _ => {
@@ -67,7 +74,7 @@ impl Chunk {
 
     fn constant_inst(&self, name: &str, offset: usize) -> usize {
         let constant = self.code[offset + 1];
-        print!("{} {} ", name, constant);
+        debug!("{} {} ", name, constant);
         self.print_value(&self.constants[constant as usize]);
         offset + 2
     }
