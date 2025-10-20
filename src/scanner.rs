@@ -1,3 +1,4 @@
+use crate::tokens::TokenType::BitXor;
 use crate::{
     keywords,
     tokens::{
@@ -5,7 +6,6 @@ use crate::{
         TokenType::{self},
     },
 };
-use crate::tokens::TokenType::BitXor;
 
 pub fn scan(source: &str) -> Vec<Token> {
     let scanner = Scanner {
@@ -70,6 +70,8 @@ impl Scanner {
                 '<' => {
                     let t = if self.match_next('=') {
                         TokenType::LessEqual
+                    } else if self.match_next('<') {
+                        TokenType::LessLess
                     } else {
                         TokenType::Less
                     };
@@ -78,6 +80,8 @@ impl Scanner {
                 '>' => {
                     let t = if self.match_next('=') {
                         TokenType::GreaterEqual
+                    } else if self.match_next('>') {
+                        TokenType::GreaterGreater
                     } else {
                         TokenType::Greater
                     };
@@ -176,7 +180,7 @@ impl Scanner {
     }
 
     fn peek(&self) -> char {
-        if self.current>=self.chars.len(){
+        if self.current >= self.chars.len() {
             '\0'
         } else {
             self.chars[self.current]
@@ -243,7 +247,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn  test() {
+    fn test() {
         let tokens = scan(
             r#"struct Customer:
                         id: u32,

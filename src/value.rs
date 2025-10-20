@@ -1,7 +1,9 @@
 use anyhow::anyhow;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Sub};
+use std::hash::{Hash, Hasher};
+use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -14,7 +16,7 @@ pub enum Value {
     String(String),
     Char(char),
     Bool(bool),
-    Date(Utc),
+    Date(DateTime<Utc>),
     Enum,
     Struct,
     List(Vec<Value>),
@@ -75,7 +77,7 @@ impl Into<Value> for bool {
     }
 }
 
-impl Into<Value> for Utc {
+impl Into<Value> for DateTime<Utc> {
     fn into(self) -> Value {
         Value::Date(self)
     }
@@ -223,3 +225,121 @@ impl BitXor<&Value> for &Value {
         }
     }
 }
+
+impl Not for &Value {
+    type Output = anyhow::Result<Value>;
+
+    fn not(self) -> Self::Output {
+        match (self) {
+            Value::Bool(b) => Ok(Value::Bool(!b)),
+            Value::I32(i32) => Ok(Value::I32(!i32)),
+            Value::I64(i64) => Ok(Value::I64(!i64)),
+            Value::U32(u32) => Ok(Value::U32(!u32)),
+            Value::U64(u64) => Ok(Value::U64(!u64)),
+            _ => Err(anyhow!("Cannot calculate not")),
+        }
+    }
+}
+
+impl Shl<&Value> for &Value {
+    type Output = anyhow::Result<Value>;
+    fn shl(self, rhs: &Value) -> Self::Output {
+        match (self, rhs) {
+            (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a << b)),
+            (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a << b)),
+            (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a << b)),
+            (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a << b)),
+            _ => Err(anyhow!("Cannot shift left on")),
+        }
+    }
+}
+
+impl Shr<&Value> for &Value {
+    type Output = anyhow::Result<Value>;
+    fn shr(self, rhs: &Value) -> Self::Output {
+        match (self, rhs) {
+            (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a >> b)),
+            (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a >> b)),
+            (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a >> b)),
+            (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a >> b)),
+            _ => Err(anyhow!("Cannot shift right on")),
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, rhs: &Self) -> bool {
+        match (self, rhs) {
+            (Value::I32(a), Value::I32(b)) => a == b,
+            (Value::I64(a), Value::I64(b)) => a == b,
+            (Value::U32(a), Value::U32(b)) => a == b,
+            (Value::U64(a), Value::U64(b)) => a == b,
+            (Value::F32(a), Value::F32(b)) => a == b,
+            (Value::F64(a), Value::F64(b)) => a == b,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Char(a), Value::Char(b)) => a == b,
+            (Value::Date(a), Value::Date(b)) => a == b,
+            (Value::List(a), Value::List(b)) => a == b,
+            (Value::Map(a), Value::Map(b)) => {
+                let mut equal = true;
+                for (k, v) in a.iter() {
+                    if !b.contains_key(k) || b.get(k).unwrap() != v { //safe unwrap
+                        equal = false;
+                        break;
+                    }
+                }
+                equal
+            }
+            // struct?
+            _ => false, //?
+        }
+    }
+}
+
+impl Eq for Value {}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, rhs: &Self) -> Option<Ordering> {
+        match (self, rhs) {
+            (Value::I32(a), Value::I32(b)) => Some(a.partial_cmp(b)?),
+            (Value::I64(a), Value::I64(b)) => Some(a.partial_cmp(b)?),
+            (Value::U32(a), Value::U32(b)) => Some(a.partial_cmp(b)?),
+            (Value::U64(a), Value::U64(b)) =>Some(a.partial_cmp(b)?),
+            (Value::F32(a), Value::F32(b)) =>Some(a.partial_cmp(b)?),
+            (Value::F64(a), Value::F64(b)) => Some(a.partial_cmp(b)?),
+            (Value::String(a), Value::String(b)) => Some(a.partial_cmp(b)?),
+            (Value::Char(a), Value::Char(b)) => Some(a.partial_cmp(b)?),
+            (Value::Date(a), Value::Date(b)) => Some(a.partial_cmp(b)?),
+            _ => None,
+        }
+    }
+}
+
+impl Hash for Value{
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::mem::discriminant(self).hash(state);
+
+        // Then hash the fields
+        match self {
+            Value::I32(i32) => i32.hash(state),
+            Value::I64(i64) => i64.hash(state),
+            Value::U32(u32) => u32.hash(state),
+            Value::U64(u64) => u64.hash(state),
+            Value::F32(f32) => f32.to_bits().hash(state),
+            Value::F64(f64) => f64.to_bits().hash(state),
+            Value::String(s) => s.hash(state),
+            Value::Char(c) => c.hash(state),
+            Value::Bool(b) => b.hash(state),
+            Value::Date(d) => d.hash(state),
+            Value::List(l) => l.hash(state),
+            _ => {}
+        }
+    }
+}
+
+// impl Ord for Value {
+//     fn cmp(&self, rhs: &Self) -> Ordering {
+//         self.partial_cmp(rhs).unwrap()
+//     }
+// }

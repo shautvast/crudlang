@@ -2,7 +2,7 @@ use tracing::debug;
 use crate::value::Value;
 use crate::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY,
-    OP_NEGATE, OP_RETURN, OP_SUBTRACT, OP_TRUE,
+    OP_NEGATE, OP_RETURN, OP_SUBTRACT, OP_TRUE, OP_NOT, OP_SHL, OP_SHR
 };
 
 pub struct Chunk {
@@ -50,16 +50,21 @@ impl Chunk {
         }
         let instruction = self.code[offset];
         match instruction {
-            OP_CONSTANT => self.constant_inst("OP_CONSTANT", offset),
-            OP_ADD => self.simple_inst("OP_ADD", offset),
-            OP_FALSE => self.simple_inst("OP_FALSE", offset),
-            OP_TRUE => self.simple_inst("OP_TRUE", offset),
-            OP_SUBTRACT => self.simple_inst("OP_SUBTRACT", offset),
-            OP_MULTIPLY => self.simple_inst("OP_MULTIPLY", offset),
-            OP_DIVIDE => self.simple_inst("OP_DIVIDE", offset),
-            OP_BITAND => self.simple_inst("OP_BITAND", offset),
-            OP_NEGATE => self.simple_inst("OP_NEGATE", offset),
-            OP_RETURN => self.simple_inst("OP_RETURN", offset),
+            OP_CONSTANT => self.constant_inst("LDC", offset),
+            OP_ADD => self.simple_inst("ADD", offset),
+            OP_FALSE => self.simple_inst("LDC_false", offset),
+            OP_TRUE => self.simple_inst("LDC_true", offset),
+            OP_SUBTRACT => self.simple_inst("SUB", offset),
+            OP_MULTIPLY => self.simple_inst("MUL", offset),
+            OP_DIVIDE => self.simple_inst("DIV", offset),
+            OP_BITAND => self.simple_inst("BITAND", offset),
+            OP_BITOR => self.simple_inst("BITOR", offset),
+            OP_BITXOR => self.simple_inst("BITXOR", offset),
+            OP_NEGATE => self.simple_inst("NEG", offset),
+            OP_NOT => self.simple_inst("NOT", offset),
+            OP_RETURN => self.simple_inst("RET", offset),
+            OP_SHL => self.simple_inst("SHL", offset),
+            OP_SHR => self.simple_inst("SHR", offset),
             _ => {
                 println!("Unknown instruction");
                 offset + 1

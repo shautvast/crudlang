@@ -4,6 +4,7 @@ use crudlang::interpret;
 // use crudlang::scanner::scan;
 
 fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
     // let mut chunk = Chunk::new("main");
     // let constant = chunk.add_constant(1.2);
     // chunk.add(crudlang::opcode::OP_CONSTANT, 123);
@@ -16,10 +17,11 @@ fn main() -> anyhow::Result<()> {
     // chunk.add(crudlang::opcode::OP_ADD, 123);
     //
     // chunk.add(crudlang::opcode::OP_RETURN, 123);
-    let chunk = compile("1&3")?;
+    let chunk = compile("3<<2")?;
     chunk.disassemble();
 
     let result = interpret(chunk);
+    println!("{:?}", result);
     Ok(())
 }
 

@@ -1,7 +1,7 @@
-use anyhow::anyhow;
-use tracing::debug;
 use crate::chunk::Chunk;
 use crate::value::Value;
+use anyhow::anyhow;
+use tracing::debug;
 
 pub mod chunk;
 pub mod compiler;
@@ -62,8 +62,8 @@ impl Vm {
                         Err(anyhow!("Cannot compare"))
                     }
                 }),
-                OP_NOT => {}
-                OP_BITAND => binary_op(self, bitand),
+                OP_NOT => unary_op(self, |a| !a),
+                OP_BITAND => binary_op(self, |a, b| a & b),
                 OP_BITOR => binary_op(self, |a, b| a | b),
                 OP_BITXOR => binary_op(self, |a, b| a ^ b),
                 OP_NEGATE => unary_op(self, |a| -a),
@@ -71,6 +71,8 @@ impl Vm {
                     // println!("{:?}", self.pop());
                     return Result::Ok(self.pop());
                 }
+                OP_SHL => binary_op(self, |a, b| a << b),
+                OP_SHR => binary_op(self, |a, b| a >> b),
                 _ => {}
             }
         }
@@ -85,7 +87,9 @@ impl Vm {
     }
 
     fn pop(&mut self) -> Value {
-        self.stack.pop().unwrap_or_else(|| Value::Error("Error occurred".to_string()))
+        self.stack
+            .pop()
+            .unwrap_or_else(|| Value::Error("Error occurred".to_string()))
     }
 }
 
@@ -107,11 +111,6 @@ fn unary_op(stack: &mut Vm, op: impl Fn(&Value) -> anyhow::Result<Value> + Copy)
         Ok(result) => stack.push(result),
         Err(e) => panic!("Error: {:?} {:?}", e, a),
     }
-}
-
-
-fn bitand(a: &Value, b: &Value) -> anyhow::Result<Value> {
-    a& b
 }
 
 #[derive(Debug)]
@@ -143,3 +142,5 @@ pub const OP_LESS_EQUAL: u16 = 19;
 pub const OP_BITAND: u16 = 20;
 pub const OP_BITOR: u16 = 21;
 pub const OP_BITXOR: u16 = 22;
+pub const OP_SHR: u16 = 23;
+pub const OP_SHL: u16 = 24;
