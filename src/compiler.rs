@@ -2,7 +2,7 @@ use crate::chunk::Chunk;
 use crate::scanner::scan;
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
-use crate::vm::{OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_RETURN, OP_SHR, OP_SHL, OP_SUBTRACT, OP_TRUE};
+use crate::vm::{OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_RETURN, OP_SHR, OP_SHL, OP_SUBTRACT, OP_TRUE, OP_EQUAL, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL};
 use anyhow::anyhow;
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -184,6 +184,11 @@ fn binary(s: &mut Compiler) -> anyhow::Result<()> {
         TokenType::BitXor => s.emit_byte(OP_BITXOR),
         TokenType::GreaterGreater => s.emit_byte(OP_SHR),
         TokenType::LessLess => s.emit_byte(OP_SHL),
+        TokenType::EqualEqual => s.emit_byte(OP_EQUAL),
+        TokenType::Greater => s.emit_byte(OP_GREATER),
+        TokenType::GreaterEqual => s.emit_byte(OP_GREATER_EQUAL),
+        TokenType::Less => s.emit_byte(OP_LESS),
+        TokenType::LessEqual => s.emit_byte(OP_LESS_EQUAL),
         _ => unimplemented!("binary other than plus, minus, star, slash"),
     }
     Ok(())
@@ -218,12 +223,12 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     rules.insert(TokenType::Bang, Rule::new(Some(unary), None, PREC_UNARY));
     rules.insert(TokenType::BangEqual, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Equal, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::EqualEqual, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::Greater, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::GreaterEqual, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::EqualEqual, Rule::new(None, Some(binary), PREC_COMPARISON));
+    rules.insert(TokenType::Greater, Rule::new(None, Some(binary), PREC_COMPARISON));
+    rules.insert(TokenType::GreaterEqual, Rule::new(None, Some(binary), PREC_COMPARISON));
     rules.insert(TokenType::GreaterGreater, Rule::new(None, Some(binary), PREC_BITSHIFT));
-    rules.insert(TokenType::Less, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::LessEqual, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Less, Rule::new(None, Some(binary), PREC_COMPARISON));
+    rules.insert(TokenType::LessEqual, Rule::new(None, Some(binary), PREC_COMPARISON));
     rules.insert(TokenType::LessLess, Rule::new(None, Some(binary), PREC_BITSHIFT));
     rules.insert(TokenType::Identifier, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::String, Rule::new(Some(literal), None, PREC_NONE));

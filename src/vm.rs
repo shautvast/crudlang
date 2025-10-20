@@ -65,6 +65,11 @@ impl Vm {
                 }
                 OP_SHL => binary_op(self, |a, b| a << b),
                 OP_SHR => binary_op(self, |a, b| a >> b),
+                OP_EQUAL => binary_op(self, |a, b| Ok(Value::Bool(a == b))),
+                OP_GREATER => binary_op(self, |a, b| Ok(Value::Bool(a > b))),
+                OP_GREATER_EQUAL => binary_op(self, |a, b| Ok(Value::Bool(a >= b))),
+                OP_LESS => binary_op(self, |a, b| Ok(Value::Bool(a < b))),
+                OP_LESS_EQUAL => binary_op(self, |a, b| Ok(Value::Bool(a <= b))),
                 _ => {}
             }
         }
@@ -86,8 +91,8 @@ impl Vm {
 }
 
 fn binary_op(vm: &mut Vm, op: impl Fn(&Value, &Value) -> anyhow::Result<Value> + Copy) {
-    let a = vm.pop();
     let b = vm.pop();
+    let a = vm.pop();
 
     let result = op(&a, &b);
     match result {
