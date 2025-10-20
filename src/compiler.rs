@@ -2,7 +2,7 @@ use crate::chunk::Chunk;
 use crate::scanner::scan;
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
-use crate::{OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_RETURN, OP_SHR, OP_SHL, OP_SUBTRACT, OP_TRUE};
+use crate::vm::{OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_RETURN, OP_SHR, OP_SHL, OP_SUBTRACT, OP_TRUE};
 use anyhow::anyhow;
 use std::collections::HashMap;
 use std::sync::LazyLock;
