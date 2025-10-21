@@ -25,6 +25,7 @@ impl Scanner {
             self.start = self.current;
             self.scan_token();
         }
+        self.add_token(TokenType::Eol);
         self.add_token(TokenType::Eof);
         self.tokens
     }
@@ -103,6 +104,7 @@ impl Scanner {
                 '\n' => {
                     self.line += 1;
                     self.new_line = true;
+                    self.add_token(TokenType::Eol);
                 }
                 '&' => {
                     let t = if self.match_next('&') {

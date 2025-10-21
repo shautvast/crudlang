@@ -2,7 +2,11 @@ use crate::chunk::Chunk;
 use crate::scanner::scan;
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
-use crate::vm::{OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_EQUAL, OP_FALSE, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT, OP_TRUE};
+use crate::vm::{
+    OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DEFINE, OP_DIVIDE, OP_EQUAL, OP_FALSE,
+    OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT,
+    OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT, OP_TRUE,
+};
 use anyhow::anyhow;
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -13,6 +17,7 @@ pub fn compile(source: &str) -> anyhow::Result<Chunk> {
     debug!("Scanned tokens: {:?}", tokens);
 
     let mut compiler = Compiler {
+        source: source.lines().map(|s| s.to_string()).collect(),
         chunk: Chunk::new("main"),
         previous_token: &tokens[0],
         current_token: &tokens[0],
@@ -25,6 +30,7 @@ pub fn compile(source: &str) -> anyhow::Result<Chunk> {
 }
 
 struct Compiler<'a> {
+    source: Vec<String>,
     chunk: Chunk,
     tokens: &'a Vec<Token>,
     current: usize,
@@ -36,8 +42,6 @@ struct Compiler<'a> {
 
 impl<'a> Compiler<'a> {
     fn compile(mut self) -> anyhow::Result<Chunk> {
-
-
         while !self.match_token(TokenType::Eof) {
             self.declaration()?;
         }
@@ -50,7 +54,41 @@ impl<'a> Compiler<'a> {
     }
 
     fn declaration(&mut self) -> anyhow::Result<()> {
-        self.statement()
+        if self.match_token(TokenType::Let) {
+            self.let_declaration()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn let_declaration(&mut self) -> anyhow::Result<()> {
+        let index = self.parse_variable("Expect variable name")?;
+        if self.match_token(TokenType::Equal) {
+            self.expression()?;
+            self.consume(TokenType::Eol, "Expect end of line")?;
+            self.define_variable(index)?;
+        } else {
+            return Err(anyhow!(
+                "You cannot declare a variable without initializing it."
+            ));
+        }
+        Ok(())
+    }
+
+    fn parse_variable(&mut self, message: &str) -> anyhow::Result<usize> {
+        self.consume(TokenType::Identifier, message)?;
+        self.identifier_constant(self.previous_token)
+    }
+
+    fn identifier_constant(&mut self, token: &Token) -> anyhow::Result<usize> {
+        let name = token.lexeme.clone();
+        let index = self.chunk.add_constant(Value::String(name));
+        Ok(index)
+    }
+
+    fn define_variable(&mut self, index: usize) -> anyhow::Result<()> {
+        self.emit_bytes(OP_DEFINE, index as u16);
+        Ok(())
     }
 
     fn statement(&mut self) -> anyhow::Result<()> {
@@ -61,7 +99,8 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn expression_statement(&mut self) -> anyhow::Result<()>{
+    fn expression_statement(&mut self) -> anyhow::Result<()> {
+        debug!("expression statement");
         self.expression()?;
         self.emit_byte(OP_POP);
         Ok(())
@@ -69,7 +108,7 @@ impl<'a> Compiler<'a> {
 
     fn print_statement(&mut self) -> anyhow::Result<()> {
         self.expression()?;
-        // self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
+        self.consume(TokenType::Eol, "No further expressions expected. Please continue on a new line after the first.\n")?;
         self.emit_byte(OP_PRINT);
         Ok(())
     }
@@ -97,7 +136,12 @@ impl<'a> Compiler<'a> {
         if token_type == self.current_token.token_type {
             self.advance()
         } else {
-            Err(anyhow!("{}", message))
+            Err(anyhow!(
+                r#"{} at line {}: "{}""#,
+                message,
+                self.current_token.line + 1,
+                self.source[self.current_token.line]
+            ))
         }
     }
 
@@ -116,6 +160,7 @@ impl<'a> Compiler<'a> {
 
     fn expression(&mut self) -> anyhow::Result<()> {
         self.parse_precedence(PREC_ASSIGNMENT)?;
+
         Ok(())
     }
 
@@ -133,7 +178,7 @@ impl<'a> Compiler<'a> {
                 }
             }
         } else {
-           return Err(anyhow!("Expect expression."));
+            return Err(anyhow!("Expect expression."));
         }
         Ok(())
     }
@@ -182,11 +227,16 @@ fn number(s: &mut Compiler) -> anyhow::Result<()> {
 
 fn literal(s: &mut Compiler) -> anyhow::Result<()> {
     match s.previous_token.token_type {
-        TokenType::False => s.emit_byte(OP_FALSE),
-        TokenType::True => s.emit_byte(OP_TRUE),
+        TokenType::False => s.emit_constant(Value::Bool(false)),
+        TokenType::True => s.emit_constant(Value::Bool(true)),
         TokenType::String => s.emit_constant(Value::String(s.previous_token.lexeme.clone())),
         _ => {}
     }
+    Ok(())
+}
+
+fn skip(s: &mut Compiler) -> anyhow::Result<()> {
+    // s.advance()
     Ok(())
 }
 
@@ -237,6 +287,12 @@ fn binary(s: &mut Compiler) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn variable(s: &mut Compiler) -> anyhow::Result<()> {
+    let index = s.identifier_constant(s.previous_token)?;
+    s.emit_bytes(OP_GET, index as u16);
+    Ok(())
+}
+
 fn get_rule(operator_type: &TokenType) -> &'static Rule {
     debug!("{:?}", operator_type);
     RULES.get(operator_type).unwrap()
@@ -244,32 +300,28 @@ fn get_rule(operator_type: &TokenType) -> &'static Rule {
 
 static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     let mut rules: HashMap<TokenType, Rule> = HashMap::new();
-    rules.insert(
-        TokenType::LeftParen,
-        Rule::new(Some(binary), None, PREC_NONE),
-    );
-    rules.insert(TokenType::RightParen, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::LeftBrace, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::RightBrace, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::LeftBracket, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::RightBracket, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::Comma, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::Dot, Rule::new(None, None, PREC_NONE));
-    rules.insert(
-        TokenType::Minus,
-        Rule::new(Some(unary), Some(binary), PREC_TERM),
-    );
-    rules.insert(TokenType::Plus, Rule::new(None, Some(binary), PREC_TERM));
-    rules.insert(TokenType::Colon, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::Slash, Rule::new(None, Some(binary), PREC_FACTOR));
-    rules.insert(TokenType::Star, Rule::new(None, Some(binary), PREC_FACTOR));
     rules.insert(TokenType::Bang, Rule::new(Some(unary), None, PREC_UNARY));
     rules.insert(TokenType::BangEqual, Rule::new(None, None, PREC_EQUALITY));
+    rules.insert(TokenType::BitOr, Rule::new(None, Some(binary), PREC_BITOR));
+    rules.insert(
+        TokenType::BitXor,
+        Rule::new(None, Some(binary), PREC_BITXOR),
+    );
+    rules.insert(TokenType::Colon, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Comma, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::DateType, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Dot, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Else, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Eof, Rule::new(Some(skip), None, PREC_NONE));
+    rules.insert(TokenType::Eol, Rule::new(Some(skip), None, PREC_NONE));
     rules.insert(TokenType::Equal, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::False, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Fn, Rule::new(None, None, PREC_NONE));
     rules.insert(
         TokenType::EqualEqual,
         Rule::new(None, Some(binary), PREC_EQUALITY),
     );
+    rules.insert(TokenType::False, Rule::new(Some(literal), None, PREC_NONE));
     rules.insert(
         TokenType::Greater,
         Rule::new(None, Some(binary), PREC_COMPARISON),
@@ -281,6 +333,19 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     rules.insert(
         TokenType::GreaterGreater,
         Rule::new(None, Some(binary), PREC_BITSHIFT),
+    );
+    rules.insert(TokenType::I32Type, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::I64Type, Rule::new(None, None, PREC_NONE));
+    rules.insert(
+        TokenType::Identifier,
+        Rule::new(Some(variable), None, PREC_NONE),
+    );
+    rules.insert(TokenType::Indent, Rule::new(Some(skip), None, PREC_NONE));
+    rules.insert(TokenType::LeftBrace, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::LeftBracket, Rule::new(None, None, PREC_NONE));
+    rules.insert(
+        TokenType::LeftParen,
+        Rule::new(Some(binary), None, PREC_NONE),
     );
     rules.insert(
         TokenType::Less,
@@ -294,41 +359,35 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
         TokenType::LessLess,
         Rule::new(None, Some(binary), PREC_BITSHIFT),
     );
-    rules.insert(TokenType::Identifier, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::String, Rule::new(Some(literal), None, PREC_NONE));
-    rules.insert(TokenType::Number, Rule::new(Some(number), None, PREC_NONE));
     rules.insert(
         TokenType::LogicalAnd,
         Rule::new(None, Some(binary), PREC_AND),
     );
     rules.insert(TokenType::LogicalOr, Rule::new(None, Some(binary), PREC_OR));
     rules.insert(
+        TokenType::Minus,
+        Rule::new(Some(unary), Some(binary), PREC_TERM),
+    );
+    rules.insert(TokenType::Number, Rule::new(Some(number), None, PREC_NONE));
+    rules.insert(TokenType::Plus, Rule::new(None, Some(binary), PREC_TERM));
+    rules.insert(TokenType::Print, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Return, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::RightParen, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::RightBrace, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::RightBracket, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Slash, Rule::new(None, Some(binary), PREC_FACTOR));
+    rules.insert(TokenType::Star, Rule::new(None, Some(binary), PREC_FACTOR));
+    rules.insert(TokenType::String, Rule::new(Some(literal), None, PREC_NONE));
+    rules.insert(
         TokenType::BitAnd,
         Rule::new(None, Some(binary), PREC_BITAND),
     );
-    rules.insert(TokenType::BitOr, Rule::new(None, Some(binary), PREC_BITOR));
-    rules.insert(
-        TokenType::BitXor,
-        Rule::new(None, Some(binary), PREC_BITXOR),
-    );
-    rules.insert(TokenType::Fn, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::StringType, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Struct, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::Else, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::False, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::True, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::While, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::Print, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::Return, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::Eof, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::True, Rule::new(Some(literal), None, PREC_NONE));
     rules.insert(TokenType::U32Type, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::U64Type, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::I32Type, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::I64Type, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::DateType, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::StringType, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::False, Rule::new(Some(literal), None, PREC_NONE));
-    rules.insert(TokenType::True, Rule::new(Some(literal), None, PREC_NONE));
-    rules.insert(TokenType::Indent, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::While, Rule::new(None, None, PREC_NONE));
 
     rules
 });

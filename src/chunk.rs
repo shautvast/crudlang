@@ -3,7 +3,7 @@ use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY,
     OP_NEGATE, OP_RETURN, OP_SUBTRACT, OP_TRUE, OP_NOT, OP_SHL, OP_SHR, OP_LESS, OP_LESS_EQUAL,
-    OP_GREATER, OP_GREATER_EQUAL, OP_EQUAL, OP_PRINT, OP_POP,
+    OP_GREATER, OP_GREATER_EQUAL, OP_EQUAL, OP_PRINT, OP_POP, OP_DEFINE, OP_GET
 };
 
 pub struct Chunk {
@@ -73,6 +73,8 @@ impl Chunk {
             OP_EQUAL => self.simple_inst("EQ", offset),
             OP_PRINT => self.simple_inst("PRT", offset),
             OP_POP => self.simple_inst("POP", offset),
+            OP_DEFINE => self.constant_inst("DEF", offset),
+            OP_GET => self.constant_inst("GET", offset),
             _ => {
                 println!("Unknown instruction");
                 offset + 1

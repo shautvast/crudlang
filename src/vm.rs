@@ -1,13 +1,15 @@
 use crate::chunk::Chunk;
 use crate::value::Value;
 use anyhow::anyhow;
+use std::collections::HashMap;
 use tracing::debug;
 
-pub fn interpret(chunk: Chunk) -> Result {
+pub fn interpret(chunk: Chunk) -> anyhow::Result<Value> {
     let mut vm = Vm {
         chunk,
         ip: 0,
         stack: vec![],
+        local_vars: HashMap::new(),
     };
     vm.run()
 }
@@ -16,26 +18,21 @@ pub struct Vm {
     chunk: Chunk,
     ip: usize,
     stack: Vec<Value>,
+    local_vars: HashMap<String, Value>,
 }
 
 impl Vm {
-    fn run(&mut self) -> Result {
+    fn run(&mut self) -> anyhow::Result<Value> {
         loop {
-            debug!("[");
-            for value in self.stack.iter() {
-                debug!("{:?} ", value);
-            }
-            debug!("]");
+            debug!("{:?}", self.stack);
             let opcode = self.chunk.code[self.ip];
             self.ip += 1;
             match opcode {
-                OP_CONSTANT => {
+                OP_CONSTANT | OP_FALSE | OP_TRUE => {
                     let value = &self.chunk.constants[self.chunk.code[self.ip] as usize];
                     self.ip += 1;
                     self.push(value.clone());
                 }
-                OP_FALSE => self.push(Value::Bool(false)),
-                OP_TRUE => self.push(Value::Bool(true)),
                 OP_ADD => binary_op(self, |a, b| a + b),
                 OP_SUBTRACT => binary_op(self, |a, b| a - b),
                 OP_MULTIPLY => binary_op(self, |a, b| a * b),
@@ -60,10 +57,11 @@ impl Vm {
                 OP_BITXOR => binary_op(self, |a, b| a ^ b),
                 OP_NEGATE => unary_op(self, |a| -a),
                 OP_RETURN => {
+                    debug!("return {:?}", self.stack);
                     return if self.stack.is_empty() {
-                        Result::Ok(Value::Void)
+                        Ok(Value::Void)
                     } else {
-                        return Result::Ok(self.pop());
+                        Ok(self.pop())
                     };
                 }
                 OP_SHL => binary_op(self, |a, b| a << b),
@@ -74,12 +72,30 @@ impl Vm {
                 OP_LESS => binary_op(self, |a, b| Ok(Value::Bool(a < b))),
                 OP_LESS_EQUAL => binary_op(self, |a, b| Ok(Value::Bool(a <= b))),
                 OP_PRINT => {
+                    debug!("print {:?}", self.stack);
                     let v = self.pop();
                     println!("{}", v);
+                }
+                OP_DEFINE => {
+                    let name = self.read_constant();
+                    let value = self.pop();
+                    self.local_vars.insert(name, value);
+                }
+                OP_GET => {
+                    let name = self.read_constant();
+                    let value = self.local_vars.get(&name).unwrap();
+                    self.push(value.clone()); // not happy
+                    debug!("after get {:?}", self.stack);
                 }
                 _ => {}
             }
         }
+    }
+
+    fn read_constant(&mut self) -> String {
+        let name = self.chunk.constants[self.chunk.code[self.ip] as usize].to_string();
+        self.ip += 1;
+        name
     }
 
     fn reset_stack(&mut self) {
@@ -117,13 +133,6 @@ fn unary_op(stack: &mut Vm, op: impl Fn(&Value) -> anyhow::Result<Value> + Copy)
     }
 }
 
-#[derive(Debug)]
-pub enum Result {
-    Ok(Value),
-    CompileError,
-    Error,
-}
-
 pub const OP_CONSTANT: u16 = 1;
 pub const OP_ADD: u16 = 2;
 pub const OP_SUBTRACT: u16 = 3;
@@ -149,3 +158,5 @@ pub const OP_BITXOR: u16 = 22;
 pub const OP_SHR: u16 = 23;
 pub const OP_SHL: u16 = 24;
 pub const OP_POP: u16 = 25;
+pub const OP_DEFINE: u16 = 26;
+pub const OP_GET: u16 = 27;

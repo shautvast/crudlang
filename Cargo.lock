@@ -199,6 +199,7 @@ dependencies = [
  "axum",
  "chrono",
  "dotenv",
+ "log",
  "log4rs",
  "reqwest",
  "serde",
