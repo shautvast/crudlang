@@ -2,6 +2,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt::{write, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
 
@@ -22,6 +23,7 @@ pub enum Value {
     List(Vec<Value>),
     Map(HashMap<Value, Value>),
     Error(String),
+    Void
 }
 
 impl Into<Value> for i32 {
@@ -92,6 +94,29 @@ impl Into<Value> for Vec<Value> {
 impl Into<Value> for HashMap<Value, Value> {
     fn into(self) -> Value {
         Value::Map(self)
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self {
+            &Value::U32(v) => write!(f, "{}", v),
+            &Value::U64(v) => write!(f, "{}", v),
+            &Value::String(v) => write!(f, "{}", v),
+            &Value::Bool(v) => write!(f, "{}", v),
+            &Value::I32(v) => write!(f, "{}", v),
+            &Value::I64(v) => write!(f, "{}", v),
+            &Value::F32(v) => write!(f, "{}", v),
+            &Value::F64(v) => write!(f, "{}", v),
+            &Value::Char(v) => write!(f, "{}", v),
+            &Value::Date(v) => write!(f, "{}", v),
+            &Value::Enum => write!(f, "enum"),
+            &Value::Struct => write!(f, "struct"),
+            &Value::List(v) => write!(f, "{:?}", v),
+            &Value::Map(v) => write!(f, "map"),
+            &Value::Error(v) => write!(f, "{}", v),
+            &Value::Void => write!(f, "()"),
+        }
     }
 }
 

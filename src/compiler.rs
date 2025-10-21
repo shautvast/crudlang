@@ -2,7 +2,7 @@ use crate::chunk::Chunk;
 use crate::scanner::scan;
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
-use crate::vm::{OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_RETURN, OP_SHR, OP_SHL, OP_SUBTRACT, OP_TRUE, OP_EQUAL, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL};
+use crate::vm::{OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_EQUAL, OP_FALSE, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT, OP_TRUE};
 use anyhow::anyhow;
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -36,10 +36,42 @@ struct Compiler<'a> {
 
 impl<'a> Compiler<'a> {
     fn compile(mut self) -> anyhow::Result<Chunk> {
-        self.expression()?;
-        self.consume(TokenType::Eof, "Expect end of expression.")?;
+
+
+        while !self.match_token(TokenType::Eof) {
+            self.declaration()?;
+        }
+
+        // self.expression()?;
+
+        // self.consume(TokenType::Eof, "Expect end of expression.")?;
         self.emit_byte(OP_RETURN);
         Ok(self.chunk)
+    }
+
+    fn declaration(&mut self) -> anyhow::Result<()> {
+        self.statement()
+    }
+
+    fn statement(&mut self) -> anyhow::Result<()> {
+        if self.match_token(TokenType::Print) {
+            self.print_statement()
+        } else {
+            self.expression_statement()
+        }
+    }
+
+    fn expression_statement(&mut self) -> anyhow::Result<()>{
+        self.expression()?;
+        self.emit_byte(OP_POP);
+        Ok(())
+    }
+
+    fn print_statement(&mut self) -> anyhow::Result<()> {
+        self.expression()?;
+        // self.consume(TokenType::Semicolon, "Expect ';' after value.")?;
+        self.emit_byte(OP_PRINT);
+        Ok(())
     }
 
     fn advance(&mut self) -> anyhow::Result<()> {
@@ -49,7 +81,7 @@ impl<'a> Compiler<'a> {
             self.current += 1;
             self.current_token = &self.tokens[self.current];
         }
-        if let TokenType::Error = self.current_token.tokentype {
+        if let TokenType::Error = self.current_token.token_type {
             self.had_error = true;
             Err(anyhow!(
                 "Error at {} on line {}",
@@ -62,11 +94,24 @@ impl<'a> Compiler<'a> {
     }
 
     fn consume(&mut self, token_type: TokenType, message: &str) -> anyhow::Result<()> {
-        if token_type == self.current_token.tokentype {
+        if token_type == self.current_token.token_type {
             self.advance()
         } else {
             Err(anyhow!("{}", message))
         }
+    }
+
+    fn match_token(&mut self, token_type: TokenType) -> bool {
+        if !self.check(token_type) {
+            false
+        } else {
+            self.advance().expect("token expected");
+            true
+        }
+    }
+
+    fn check(&mut self, token_type: TokenType) -> bool {
+        self.current_token.token_type == token_type
     }
 
     fn expression(&mut self) -> anyhow::Result<()> {
@@ -76,19 +121,19 @@ impl<'a> Compiler<'a> {
 
     fn parse_precedence(&mut self, precedence: usize) -> anyhow::Result<()> {
         self.advance()?;
-        let rule = get_rule(&self.previous_token.tokentype);
-        debug!("Precedence rule: {:?}",rule);
+        let rule = get_rule(&self.previous_token.token_type);
+        debug!("Precedence rule: {:?}", rule);
         if let Some(prefix) = rule.prefix {
             prefix(self)?;
-            while precedence <= get_rule(&self.current_token.tokentype).precedence {
+            while precedence <= get_rule(&self.current_token.token_type).precedence {
                 self.advance()?;
-                let infix_rule = get_rule(&self.previous_token.tokentype).infix;
+                let infix_rule = get_rule(&self.previous_token.token_type).infix;
                 if let Some(infix) = infix_rule {
                     infix(self)?;
                 }
             }
         } else {
-            return Err(anyhow!("Expect expression."));
+           return Err(anyhow!("Expect expression."));
         }
         Ok(())
     }
@@ -128,17 +173,15 @@ impl Rule {
 }
 
 fn number(s: &mut Compiler) -> anyhow::Result<()> {
-    let tt = s.previous_token.tokentype;
-    let value = s.previous_token.lexeme.clone();
-    s.emit_constant(match tt {
-        TokenType::Number => Value::F64(value.parse().unwrap()),
+    s.emit_constant(match s.previous_token.token_type {
+        TokenType::Number => Value::F64(s.previous_token.lexeme.parse()?),
         _ => unimplemented!(), // TODO numeric types
     });
     Ok(())
 }
 
 fn literal(s: &mut Compiler) -> anyhow::Result<()> {
-    match s.previous_token.tokentype {
+    match s.previous_token.token_type {
         TokenType::False => s.emit_byte(OP_FALSE),
         TokenType::True => s.emit_byte(OP_TRUE),
         TokenType::String => s.emit_constant(Value::String(s.previous_token.lexeme.clone())),
@@ -153,7 +196,7 @@ fn grouping(s: &mut Compiler) -> anyhow::Result<()> {
 }
 
 fn unary(s: &mut Compiler) -> anyhow::Result<()> {
-    let operator_type = s.previous_token.tokentype;
+    let operator_type = s.previous_token.token_type;
 
     s.parse_precedence(PREC_UNARY)?;
 
@@ -170,8 +213,8 @@ fn unary(s: &mut Compiler) -> anyhow::Result<()> {
 }
 
 fn binary(s: &mut Compiler) -> anyhow::Result<()> {
-    let operator_type = &s.previous_token.tokentype;
-    debug!("operator {:?}",operator_type);
+    let operator_type = &s.previous_token.token_type;
+    debug!("operator {:?}", operator_type);
     let rule = get_rule(operator_type);
     s.parse_precedence(rule.precedence + 1)?;
     match operator_type {
@@ -221,23 +264,53 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     rules.insert(TokenType::Slash, Rule::new(None, Some(binary), PREC_FACTOR));
     rules.insert(TokenType::Star, Rule::new(None, Some(binary), PREC_FACTOR));
     rules.insert(TokenType::Bang, Rule::new(Some(unary), None, PREC_UNARY));
-    rules.insert(TokenType::BangEqual, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::BangEqual, Rule::new(None, None, PREC_EQUALITY));
     rules.insert(TokenType::Equal, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::EqualEqual, Rule::new(None, Some(binary), PREC_COMPARISON));
-    rules.insert(TokenType::Greater, Rule::new(None, Some(binary), PREC_COMPARISON));
-    rules.insert(TokenType::GreaterEqual, Rule::new(None, Some(binary), PREC_COMPARISON));
-    rules.insert(TokenType::GreaterGreater, Rule::new(None, Some(binary), PREC_BITSHIFT));
-    rules.insert(TokenType::Less, Rule::new(None, Some(binary), PREC_COMPARISON));
-    rules.insert(TokenType::LessEqual, Rule::new(None, Some(binary), PREC_COMPARISON));
-    rules.insert(TokenType::LessLess, Rule::new(None, Some(binary), PREC_BITSHIFT));
+    rules.insert(
+        TokenType::EqualEqual,
+        Rule::new(None, Some(binary), PREC_EQUALITY),
+    );
+    rules.insert(
+        TokenType::Greater,
+        Rule::new(None, Some(binary), PREC_COMPARISON),
+    );
+    rules.insert(
+        TokenType::GreaterEqual,
+        Rule::new(None, Some(binary), PREC_COMPARISON),
+    );
+    rules.insert(
+        TokenType::GreaterGreater,
+        Rule::new(None, Some(binary), PREC_BITSHIFT),
+    );
+    rules.insert(
+        TokenType::Less,
+        Rule::new(None, Some(binary), PREC_COMPARISON),
+    );
+    rules.insert(
+        TokenType::LessEqual,
+        Rule::new(None, Some(binary), PREC_COMPARISON),
+    );
+    rules.insert(
+        TokenType::LessLess,
+        Rule::new(None, Some(binary), PREC_BITSHIFT),
+    );
     rules.insert(TokenType::Identifier, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::String, Rule::new(Some(literal), None, PREC_NONE));
     rules.insert(TokenType::Number, Rule::new(Some(number), None, PREC_NONE));
-    rules.insert(TokenType::LogicalAnd, Rule::new(None, Some(binary), PREC_AND));
+    rules.insert(
+        TokenType::LogicalAnd,
+        Rule::new(None, Some(binary), PREC_AND),
+    );
     rules.insert(TokenType::LogicalOr, Rule::new(None, Some(binary), PREC_OR));
-    rules.insert(TokenType::BitAnd, Rule::new(None, Some(binary), PREC_BITAND));
+    rules.insert(
+        TokenType::BitAnd,
+        Rule::new(None, Some(binary), PREC_BITAND),
+    );
     rules.insert(TokenType::BitOr, Rule::new(None, Some(binary), PREC_BITOR));
-    rules.insert(TokenType::BitXor, Rule::new(None, Some(binary), PREC_BITXOR));
+    rules.insert(
+        TokenType::BitXor,
+        Rule::new(None, Some(binary), PREC_BITXOR),
+    );
     rules.insert(TokenType::Fn, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Struct, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Else, Rule::new(None, None, PREC_NONE));

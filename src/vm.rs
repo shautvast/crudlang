@@ -1,7 +1,7 @@
-use anyhow::anyhow;
-use tracing::debug;
 use crate::chunk::Chunk;
 use crate::value::Value;
+use anyhow::anyhow;
+use tracing::debug;
 
 pub fn interpret(chunk: Chunk) -> Result {
     let mut vm = Vm {
@@ -60,8 +60,11 @@ impl Vm {
                 OP_BITXOR => binary_op(self, |a, b| a ^ b),
                 OP_NEGATE => unary_op(self, |a| -a),
                 OP_RETURN => {
-                    // println!("{:?}", self.pop());
-                    return Result::Ok(self.pop());
+                    return if self.stack.is_empty() {
+                        Result::Ok(Value::Void)
+                    } else {
+                        return Result::Ok(self.pop());
+                    };
                 }
                 OP_SHL => binary_op(self, |a, b| a << b),
                 OP_SHR => binary_op(self, |a, b| a >> b),
@@ -70,6 +73,10 @@ impl Vm {
                 OP_GREATER_EQUAL => binary_op(self, |a, b| Ok(Value::Bool(a >= b))),
                 OP_LESS => binary_op(self, |a, b| Ok(Value::Bool(a < b))),
                 OP_LESS_EQUAL => binary_op(self, |a, b| Ok(Value::Bool(a <= b))),
+                OP_PRINT => {
+                    let v = self.pop();
+                    println!("{}", v);
+                }
                 _ => {}
             }
         }
@@ -141,3 +148,4 @@ pub const OP_BITOR: u16 = 21;
 pub const OP_BITXOR: u16 = 22;
 pub const OP_SHR: u16 = 23;
 pub const OP_SHL: u16 = 24;
+pub const OP_POP: u16 = 25;

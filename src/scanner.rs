@@ -50,6 +50,7 @@ impl Scanner {
                 '-' => self.add_token(TokenType::Minus),
                 '+' => self.add_token(TokenType::Plus),
                 ':' => self.add_token(TokenType::Colon),
+                ';' => self.add_token(TokenType::Semicolon),
                 '*' => self.add_token(TokenType::Star),
                 '!' => {
                     let t = if self.match_next('=') {

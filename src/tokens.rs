@@ -1,6 +1,6 @@
 #[derive(Debug)]
 pub struct Token {
-    pub tokentype: TokenType,
+    pub token_type: TokenType,
     pub lexeme: String,
     pub line: usize,
 }
@@ -8,7 +8,7 @@ pub struct Token {
 impl Token {
     pub(crate) fn new(tokentype: TokenType, lexeme: String, line: usize) -> Self {
         Self {
-            tokentype,
+            token_type: tokentype,
             lexeme,
             line,
         }
@@ -30,6 +30,7 @@ pub(crate) enum TokenType {
     LeftBracket,
     RightBracket,
     Colon,
+    Semicolon,
     Comma,
     Dot,
     Star,
