@@ -4,6 +4,21 @@ use anyhow::anyhow;
 use std::collections::HashMap;
 use tracing::debug;
 
+macro_rules! define_var {
+    ($self:ident, $variant:ident) => {{
+        let name = $self.read_constant();
+        let value = $self.pop();
+        if let Value::$variant(_) = value {
+            $self.local_vars.insert(name, value);
+        } else {
+            return Err(anyhow!(
+                concat!("Expected ", stringify!($variant), ", got {:?}"),
+                value
+            ));
+        }
+    }};
+}
+
 pub fn interpret(chunk: Chunk) -> anyhow::Result<Value> {
     let mut vm = Vm {
         chunk,
@@ -81,123 +96,19 @@ impl Vm {
                     let value = self.pop();
                     self.local_vars.insert(name, value);
                 }
-                OP_DEF_I32 => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::I32(_) = value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected i32, got {:?}", value));
-                    }
-                }
-                OP_DEF_I64 => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::I64(_) = value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected i64, got {:?}", value));
-                    }
-                }
-                OP_DEF_U32 => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::U32(_) = value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected u32, got {:?}", value));
-                    }
-                }
-                OP_DEF_U64 => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::U64(_) = value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected u64, got {:?}", value));
-                    }
-                }
-                OP_DEF_F32 => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::F32(_) = value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected f32, got {:?}", value));
-                    }
-                }
-                OP_DEF_F64 => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::F64(_) = value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected f64, got {:?}", value));
-                    }
-                }
-                OP_DEF_STRING => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::String(_) = &value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected string, got {:?}", value));
-                    }
-                }
-                OP_DEF_CHAR => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::Char(_) = &value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected char, got {:?}", value));
-                    }
-                }
-                OP_DEF_BOOL => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::Bool(_) = &value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected bool, got {:?}", value));
-                    }
-                }
-                OP_DEF_DATE => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::Date(_) = &value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected date, got {:?}", value));
-                    }
-                }
-                OP_DEF_LIST => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::List(_) = &value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected list, got {:?}", value));
-                    }
-                }
-                OP_DEF_MAP => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::Map(_) = &value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected map, got {:?}", value));
-                    }
-                }
-                OP_DEF_STRUCT => {
-                    let name = self.read_constant();
-                    let value = self.pop();
-                    if let Value::Struct(_) = &value {
-                        self.local_vars.insert(name, value);
-                    } else {
-                        return Err(anyhow!("Expected object, got {:?}", value));
-                    }
-                }
+                OP_DEF_I32 => define_var!(self, I32),
+                OP_DEF_I64 => define_var!(self, I64),
+                OP_DEF_U32 => define_var!(self, U32),
+                OP_DEF_U64 => define_var!(self, U64),
+                OP_DEF_F32 => define_var!(self, F32),
+                OP_DEF_F64 => define_var!(self, F64),
+                OP_DEF_STRING => define_var!(self, String),
+                OP_DEF_CHAR => define_var!(self, Char),
+                OP_DEF_BOOL =>define_var!(self, Bool),
+                OP_DEF_DATE => define_var!(self, Date),
+                OP_DEF_LIST => define_var!(self, List),
+                OP_DEF_MAP => define_var!(self, Map),
+                OP_DEF_STRUCT => define_var!(self, Struct),
                 OP_GET => {
                     let name = self.read_constant();
                     let value = self.local_vars.get(&name).unwrap();
@@ -275,7 +186,7 @@ pub const OP_BITXOR: u16 = 22;
 pub const OP_SHR: u16 = 23;
 pub const OP_SHL: u16 = 24;
 pub const OP_POP: u16 = 25;
-pub const OP_DEFINE: u16 = 26;
+pub const OP_DEFINE: u16 = 26;// may be obsolete already
 pub const OP_GET: u16 = 27;
 pub const OP_DEF_I32: u16 = 28;
 pub const OP_DEF_I64: u16 = 29;
