@@ -2,9 +2,7 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let chunk = crudlang::compiler::compile(
-        r#"let a = "hello " + 42
-  print a print a
-  print a"#,
+        r#"let a:bool = 42"#,
     );
     match chunk {
         Err(e) => {

@@ -179,7 +179,7 @@ impl Scanner {
         let value: String = self.chars[self.start + 1..self.current - 1]
             .iter()
             .collect();
-        self.add_token_with_value(TokenType::String, value);
+        self.add_token_with_value(TokenType::Text, value);
     }
 
     fn peek(&self) -> char {

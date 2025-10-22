@@ -81,6 +81,13 @@ impl Vm {
                     let value = self.pop();
                     self.local_vars.insert(name, value);
                 }
+                OP_DEF_I32 => {
+                    let name = self.read_constant();
+                    let value = self.pop();
+                    if let Value::I32(v) = value {
+                        self.local_vars.insert(name, value);
+                    }
+                }
                 OP_GET => {
                     let name = self.read_constant();
                     let value = self.local_vars.get(&name).unwrap();
@@ -160,3 +167,13 @@ pub const OP_SHL: u16 = 24;
 pub const OP_POP: u16 = 25;
 pub const OP_DEFINE: u16 = 26;
 pub const OP_GET: u16 = 27;
+pub const OP_DEF_I32: u16 = 28;
+pub const OP_DEF_I64: u16 = 29;
+pub const OP_DEF_U32: u16 = 30;
+pub const OP_DEF_DATE: u16 = 31;
+pub const OP_DEF_STRING: u16 = 32;
+pub const OP_DEF_CHAR: u16 = 33;
+pub const OP_DEF_BOOL: u16 = 34;
+pub const OP_DEF_LIST: u16 = 35;
+pub const OP_DEF_MAP: u16 = 36;
+pub const OP_DEF_OBJ: u16 = 37;

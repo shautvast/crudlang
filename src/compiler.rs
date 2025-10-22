@@ -3,12 +3,15 @@ use crate::scanner::scan;
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use crate::vm::{
-    OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DEFINE, OP_DIVIDE, OP_EQUAL, OP_FALSE,
-    OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT,
-    OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT, OP_TRUE,
+    OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_CHAR, OP_DEF_DATE,
+    OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_MAP, OP_DEF_OBJ, OP_DEF_STRING, OP_DEFINE,
+    OP_DIVIDE, OP_EQUAL, OP_FALSE, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL,
+    OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+    OP_TRUE,
 };
 use anyhow::anyhow;
 use std::collections::HashMap;
+use std::mem::discriminant;
 use std::sync::LazyLock;
 use tracing::debug;
 
@@ -23,6 +26,8 @@ pub fn compile(source: &str) -> anyhow::Result<Chunk> {
         current_token: &tokens[0],
         tokens: &tokens,
         current: 0,
+        types: vec![],
+        locals: vec![],
         previous: 0,
         had_error: false,
     };
@@ -36,6 +41,8 @@ struct Compiler<'a> {
     current: usize,
     previous_token: &'a Token,
     current_token: &'a Token,
+    types: Vec<Token>,
+    locals: Vec<String>,
     previous: usize,
     had_error: bool,
 }
@@ -63,10 +70,28 @@ impl<'a> Compiler<'a> {
 
     fn let_declaration(&mut self) -> anyhow::Result<()> {
         let index = self.parse_variable("Expect variable name")?;
+        let mut var_type = None;
+        if self.check(TokenType::Colon) {
+            self.consume(TokenType::Colon, "must not happen")?;
+            match self.current_token.token_type {
+                TokenType::I32
+                | TokenType::I64
+                | TokenType::U32
+                | TokenType::U64
+                | TokenType::Date
+                | TokenType::String
+                | TokenType::Char
+                | TokenType::Bool
+                | TokenType::ListType
+                | TokenType::MapType => var_type = Some(self.current_token.token_type),
+                _ => return Err(anyhow!("Invalid type {:?}", self.current_token.token_type)),
+            }
+            self.advance()?;
+        }
         if self.match_token(TokenType::Equal) {
-            self.expression()?;
+            self.expression(var_type)?;
             self.consume(TokenType::Eol, "Expect end of line")?;
-            self.define_variable(index)?;
+            self.define_variable(var_type, index)?;
         } else {
             return Err(anyhow!(
                 "You cannot declare a variable without initializing it."
@@ -86,8 +111,23 @@ impl<'a> Compiler<'a> {
         Ok(index)
     }
 
-    fn define_variable(&mut self, index: usize) -> anyhow::Result<()> {
-        self.emit_bytes(OP_DEFINE, index as u16);
+    fn define_variable(&mut self, var_type: Option<TokenType>, index: usize) -> anyhow::Result<()> {
+        let def_op = match var_type {
+            Some(TokenType::I32) => OP_DEF_I32,
+            Some(TokenType::I64) => OP_DEF_I64,
+            Some(TokenType::U32) => OP_DEF_I64,
+            Some(TokenType::U64) => OP_DEF_I64,
+            Some(TokenType::Date) => OP_DEF_DATE,
+            Some(TokenType::String) => OP_DEF_STRING,
+            Some(TokenType::Char) => OP_DEF_CHAR,
+            Some(TokenType::Bool) => OP_DEF_BOOL,
+            Some(TokenType::ListType) => OP_DEF_LIST,
+            Some(TokenType::MapType) => OP_DEF_MAP,
+            Some(TokenType::Object) => OP_DEF_OBJ,
+            _ => OP_DEFINE,
+        };
+
+        self.emit_bytes(def_op, index as u16);
         Ok(())
     }
 
@@ -101,14 +141,17 @@ impl<'a> Compiler<'a> {
 
     fn expression_statement(&mut self) -> anyhow::Result<()> {
         debug!("expression statement");
-        self.expression()?;
+        self.expression(None)?;
         self.emit_byte(OP_POP);
         Ok(())
     }
 
     fn print_statement(&mut self) -> anyhow::Result<()> {
-        self.expression()?;
-        self.consume(TokenType::Eol, "No further expressions expected. Please continue on a new line after the first.\n")?;
+        self.expression(None)?;
+        self.consume(
+            TokenType::Eol,
+            "No further statements expected. Please start on a new line after the first one.\n",
+        )?;
         self.emit_byte(OP_PRINT);
         Ok(())
     }
@@ -158,23 +201,27 @@ impl<'a> Compiler<'a> {
         self.current_token.token_type == token_type
     }
 
-    fn expression(&mut self) -> anyhow::Result<()> {
-        self.parse_precedence(PREC_ASSIGNMENT)?;
+    fn expression(&mut self, expected_type: Option<TokenType>) -> anyhow::Result<()> {
+        self.parse_precedence(PREC_ASSIGNMENT, expected_type)?;
 
         Ok(())
     }
 
-    fn parse_precedence(&mut self, precedence: usize) -> anyhow::Result<()> {
+    fn parse_precedence(
+        &mut self,
+        precedence: usize,
+        expected_type: Option<TokenType>,
+    ) -> anyhow::Result<()> {
         self.advance()?;
         let rule = get_rule(&self.previous_token.token_type);
         debug!("Precedence rule: {:?}", rule);
         if let Some(prefix) = rule.prefix {
-            prefix(self)?;
+            prefix(self, expected_type)?;
             while precedence <= get_rule(&self.current_token.token_type).precedence {
                 self.advance()?;
                 let infix_rule = get_rule(&self.previous_token.token_type).infix;
                 if let Some(infix) = infix_rule {
-                    infix(self)?;
+                    infix(self, expected_type)?;
                 }
             }
         } else {
@@ -198,7 +245,7 @@ impl<'a> Compiler<'a> {
     }
 }
 
-type ParseFn = fn(&mut Compiler) -> anyhow::Result<()>;
+type ParseFn = fn(&mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()>;
 
 #[derive(Debug)]
 struct Rule {
@@ -217,38 +264,66 @@ impl Rule {
     }
 }
 
-fn number(s: &mut Compiler) -> anyhow::Result<()> {
-    s.emit_constant(match s.previous_token.token_type {
-        TokenType::Number => Value::F64(s.previous_token.lexeme.parse()?),
-        _ => unimplemented!(), // TODO numeric types
-    });
+fn number(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
+    let number = &s.previous_token.lexeme;
+    let value = if let Some(expected_type) = expected_type {
+        match expected_type {
+            TokenType::I32 => Value::I32(number.parse()?),
+            TokenType::I64 => Value::I64(number.parse()?),
+            TokenType::U32 => Value::U32(number.parse()?),
+            TokenType::U64 => Value::U64(number.parse()?),
+            TokenType::F32 => Value::U32(number.parse()?),
+            TokenType::F64 => Value::U64(number.parse()?),
+
+            _ => {return Err(anyhow!("Invalid type: expected {} value, got {}({})", expected_type, &s.previous_token.token_type, number));}
+        }
+    } else {
+        if let TokenType::Number = s.previous_token.token_type {
+            if number.contains('.'){
+                Value::F64(number.parse()?)
+            } else {
+                Value::I64(number.parse()?)
+            }
+        } else {
+            return Err(anyhow!("I did not think this would happen"))
+        }
+    };
+    s.emit_constant(value);
     Ok(())
 }
 
-fn literal(s: &mut Compiler) -> anyhow::Result<()> {
+fn literal(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
+    if let Some(expected_type) = expected_type {
+        if discriminant(&expected_type) != discriminant(&s.previous_token.token_type) {
+            return Err(anyhow!(
+                "Cannot assign {:?} to {:?}",
+                s.previous_token.token_type,
+                expected_type
+            ));
+        }
+    }
     match s.previous_token.token_type {
         TokenType::False => s.emit_constant(Value::Bool(false)),
         TokenType::True => s.emit_constant(Value::Bool(true)),
-        TokenType::String => s.emit_constant(Value::String(s.previous_token.lexeme.clone())),
+        TokenType::Text => s.emit_constant(Value::String(s.previous_token.lexeme.clone())),
         _ => {}
     }
     Ok(())
 }
 
-fn skip(s: &mut Compiler) -> anyhow::Result<()> {
-    // s.advance()
+fn skip(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn grouping(s: &mut Compiler) -> anyhow::Result<()> {
-    s.expression()?;
+fn grouping(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
+    s.expression(None)?;
     s.consume(TokenType::RightParen, "Expect ')' after expression.")
 }
 
-fn unary(s: &mut Compiler) -> anyhow::Result<()> {
+fn unary(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
     let operator_type = s.previous_token.token_type;
 
-    s.parse_precedence(PREC_UNARY)?;
+    s.parse_precedence(PREC_UNARY, None)?;
 
     match operator_type {
         TokenType::Minus => {
@@ -262,11 +337,11 @@ fn unary(s: &mut Compiler) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn binary(s: &mut Compiler) -> anyhow::Result<()> {
+fn binary(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
     let operator_type = &s.previous_token.token_type;
     debug!("operator {:?}", operator_type);
     let rule = get_rule(operator_type);
-    s.parse_precedence(rule.precedence + 1)?;
+    s.parse_precedence(rule.precedence + 1, None)?;
     match operator_type {
         TokenType::Plus => s.emit_byte(OP_ADD),
         TokenType::Minus => s.emit_byte(OP_SUBTRACT),
@@ -287,7 +362,7 @@ fn binary(s: &mut Compiler) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn variable(s: &mut Compiler) -> anyhow::Result<()> {
+fn variable(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
     let index = s.identifier_constant(s.previous_token)?;
     s.emit_bytes(OP_GET, index as u16);
     Ok(())
@@ -309,7 +384,7 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     );
     rules.insert(TokenType::Colon, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Comma, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::DateType, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::Date, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Dot, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Else, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Eof, Rule::new(Some(skip), None, PREC_NONE));
@@ -334,8 +409,8 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
         TokenType::GreaterGreater,
         Rule::new(None, Some(binary), PREC_BITSHIFT),
     );
-    rules.insert(TokenType::I32Type, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::I64Type, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::I32, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::I64, Rule::new(None, None, PREC_NONE));
     rules.insert(
         TokenType::Identifier,
         Rule::new(Some(variable), None, PREC_NONE),
@@ -377,16 +452,16 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     rules.insert(TokenType::RightBracket, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Slash, Rule::new(None, Some(binary), PREC_FACTOR));
     rules.insert(TokenType::Star, Rule::new(None, Some(binary), PREC_FACTOR));
-    rules.insert(TokenType::String, Rule::new(Some(literal), None, PREC_NONE));
+    rules.insert(TokenType::Text, Rule::new(Some(literal), None, PREC_NONE));
     rules.insert(
         TokenType::BitAnd,
         Rule::new(None, Some(binary), PREC_BITAND),
     );
-    rules.insert(TokenType::StringType, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::String, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Struct, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::True, Rule::new(Some(literal), None, PREC_NONE));
-    rules.insert(TokenType::U32Type, Rule::new(None, None, PREC_NONE));
-    rules.insert(TokenType::U64Type, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::U32, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::U64, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::While, Rule::new(None, None, PREC_NONE));
 
     rules
@@ -407,3 +482,19 @@ const PREC_FACTOR: usize = 11;
 const PREC_UNARY: usize = 12;
 const PREC_CALL: usize = 13;
 const PREC_PRIMARY: usize = 14;
+
+enum ValueType{
+    DateType,
+    BoolType,
+    CharType,
+    F32Type,
+    F64Type,
+    I32Type,
+    I64Type,
+    ObjectType,
+    U32Type,
+    U64Type,
+    StringType,
+    ListType,
+    MapType,
+}
