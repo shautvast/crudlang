@@ -3,7 +3,7 @@ use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_FALSE, OP_MULTIPLY,
     OP_NEGATE, OP_RETURN, OP_SUBTRACT, OP_TRUE, OP_NOT, OP_SHL, OP_SHR, OP_LESS, OP_LESS_EQUAL,
-    OP_GREATER, OP_GREATER_EQUAL, OP_EQUAL, OP_PRINT, OP_POP, OP_DEFINE, OP_GET,OP_DEF_STRING
+    OP_GREATER, OP_GREATER_EQUAL, OP_EQUAL, OP_PRINT, OP_POP, OP_DEFINE, OP_GET,OP_DEF_STRING, OP_DEF_BOOL
 };
 
 pub struct Chunk {
@@ -75,6 +75,7 @@ impl Chunk {
             OP_POP => self.simple_inst("POP", offset),
             OP_DEFINE => self.constant_inst("DEF", offset),
             OP_DEF_STRING => self.constant_inst("DEFSTR", offset),
+            OP_DEF_BOOL => self.constant_inst("DEFBOOL", offset),
             OP_GET => self.constant_inst("GET", offset),
             _ => {
                 println!("Unknown instruction {}", instruction);
@@ -90,12 +91,12 @@ impl Chunk {
 
     fn constant_inst(&self, name: &str, offset: usize) -> usize {
         let constant = self.code[offset + 1];
-        print!("{} {} ", name, constant);
+        print!("{} {}:", name, constant);
         self.print_value(&self.constants[constant as usize]);
         offset + 2
     }
 
     fn print_value(&self, value: &Value) {
-        println!("{:?}", value);
+        println!("{}", value);
     }
 }

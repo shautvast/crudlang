@@ -4,10 +4,10 @@ use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_CHAR, OP_DEF_DATE,
-    OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_MAP, OP_DEF_OBJ, OP_DEF_STRING, OP_DEFINE,
-    OP_DIVIDE, OP_EQUAL, OP_FALSE, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL,
-    OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
-    OP_TRUE,
+    OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_MAP, OP_DEF_STRUCT, OP_DEF_STRING,
+    OP_DEFINE, OP_DIVIDE, OP_EQUAL, OP_FALSE, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS,
+    OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR,
+    OP_SUBTRACT, OP_TRUE,
 };
 use anyhow::anyhow;
 use std::collections::HashMap;
@@ -70,7 +70,7 @@ impl<'a> Compiler<'a> {
 
     fn let_declaration(&mut self) -> anyhow::Result<()> {
         let index = self.parse_variable("Expect variable name")?;
-        let mut var_type = None;
+        let mut declared_type = None;
         if self.check(TokenType::Colon) {
             self.consume(TokenType::Colon, "must not happen")?;
             match self.current_token.token_type {
@@ -83,15 +83,16 @@ impl<'a> Compiler<'a> {
                 | TokenType::Char
                 | TokenType::Bool
                 | TokenType::ListType
-                | TokenType::MapType => var_type = Some(self.current_token.token_type),
+                | TokenType::MapType => declared_type = Some(self.current_token.token_type),
                 _ => return Err(anyhow!("Invalid type {:?}", self.current_token.token_type)),
             }
             self.advance()?;
         }
         if self.match_token(TokenType::Equal) {
-            self.expression(var_type)?;
+            self.expression(declared_type)?;
+            let derived_type = Some(&self.previous_token.token_type);
             self.consume(TokenType::Eol, "Expect end of line")?;
-            self.define_variable(var_type, index)?;
+            self.define_variable(declared_type, derived_type, index)?;
         } else {
             return Err(anyhow!(
                 "You cannot declare a variable without initializing it."
@@ -111,7 +112,12 @@ impl<'a> Compiler<'a> {
         Ok(index)
     }
 
-    fn define_variable(&mut self, var_type: Option<TokenType>, index: usize) -> anyhow::Result<()> {
+    fn define_variable(
+        &mut self,
+        var_type: Option<TokenType>,
+        derived_type: Option<&TokenType>,
+        index: usize,
+    ) -> anyhow::Result<()> {
         let def_op = match var_type {
             Some(TokenType::I32) => OP_DEF_I32,
             Some(TokenType::I64) => OP_DEF_I64,
@@ -123,8 +129,17 @@ impl<'a> Compiler<'a> {
             Some(TokenType::Bool) => OP_DEF_BOOL,
             Some(TokenType::ListType) => OP_DEF_LIST,
             Some(TokenType::MapType) => OP_DEF_MAP,
-            Some(TokenType::Object) => OP_DEF_OBJ,
-            _ => OP_DEFINE,
+            Some(TokenType::Object) => OP_DEF_STRUCT,
+            _ => match derived_type {
+                Some(TokenType::Text) => OP_DEF_STRING,
+                Some(TokenType::Bool) => OP_DEF_BOOL,
+                Some(TokenType::Char) => OP_DEF_CHAR,
+                Some(TokenType::F64) => OP_DEF_F64,
+                Some(TokenType::I64) => OP_DEF_I64,
+                Some(TokenType::ListType) => OP_DEF_LIST,
+                Some(TokenType::MapType) => OP_DEF_MAP,
+                _ => OP_DEFINE,
+            },
         };
 
         self.emit_bytes(def_op, index as u16);
@@ -275,17 +290,24 @@ fn number(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<
             TokenType::F32 => Value::U32(number.parse()?),
             TokenType::F64 => Value::U64(number.parse()?),
 
-            _ => {return Err(anyhow!("Invalid type: expected {} value, got {}({})", expected_type, &s.previous_token.token_type, number));}
+            _ => {
+                return Err(anyhow!(
+                    "Invalid type: expected {} value, got {}({})",
+                    expected_type,
+                    &s.previous_token.token_type,
+                    number
+                ));
+            }
         }
     } else {
         if let TokenType::Number = s.previous_token.token_type {
-            if number.contains('.'){
+            if number.contains('.') {
                 Value::F64(number.parse()?)
             } else {
                 Value::I64(number.parse()?)
             }
         } else {
-            return Err(anyhow!("I did not think this would happen"))
+            return Err(anyhow!("I did not think this would happen"));
         }
     };
     s.emit_constant(value);
@@ -293,20 +315,30 @@ fn number(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<
 }
 
 fn literal(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
+    let actual_type = &s.previous_token.token_type;
     if let Some(expected_type) = expected_type {
-        if discriminant(&expected_type) != discriminant(&s.previous_token.token_type) {
-            return Err(anyhow!(
-                "Cannot assign {:?} to {:?}",
-                s.previous_token.token_type,
-                expected_type
-            ));
+        match (actual_type, expected_type) {
+            (TokenType::False, TokenType::Bool) => s.emit_constant(Value::Bool(false)),
+            (TokenType::True, TokenType::Bool) => s.emit_constant(Value::Bool(true)),
+            (TokenType::Text, TokenType::String) => {
+                s.emit_constant(Value::String(s.previous_token.lexeme.clone()))
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Invalid type: expected {} value, got {}({})",
+                    expected_type,
+                    &s.previous_token.token_type,
+                    s.previous_token.lexeme
+                ));
+            }
         }
-    }
-    match s.previous_token.token_type {
-        TokenType::False => s.emit_constant(Value::Bool(false)),
-        TokenType::True => s.emit_constant(Value::Bool(true)),
-        TokenType::Text => s.emit_constant(Value::String(s.previous_token.lexeme.clone())),
-        _ => {}
+    } else {
+        match actual_type {
+            TokenType::False => s.emit_constant(Value::Bool(false)),
+            TokenType::True => s.emit_constant(Value::Bool(true)),
+            TokenType::Text => s.emit_constant(Value::String(s.previous_token.lexeme.clone())),
+            _ => {}
+        }
     }
     Ok(())
 }
@@ -483,7 +515,7 @@ const PREC_UNARY: usize = 12;
 const PREC_CALL: usize = 13;
 const PREC_PRIMARY: usize = 14;
 
-enum ValueType{
+enum ValueType {
     DateType,
     BoolType,
     CharType,

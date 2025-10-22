@@ -7,6 +7,35 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
 
 #[derive(Debug, Clone)]
+pub struct StructDefinition {
+    fields: Vec<String>
+}
+
+#[derive(Debug, Clone)]
+pub struct Instance {
+    definition: StructDefinition,
+    fields: Vec<Value>
+}
+
+impl Instance {
+    pub fn new(definition: StructDefinition) -> Self {
+        Self {
+            definition,
+            fields: Vec::new()
+        }
+    }
+}
+
+impl Display for Instance {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for (i, field) in self.definition.fields.iter().enumerate() {
+            write!(f, "{}: {}", field, self.fields[i])?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Value {
     U32(u32),
     I32(i32),
@@ -19,9 +48,9 @@ pub enum Value {
     Bool(bool),
     Date(DateTime<Utc>),
     Enum,
-    Struct,
     List(Vec<Value>),
     Map(HashMap<Value, Value>),
+    Struct(Instance),
     Error(String),
     Void
 }
@@ -111,7 +140,7 @@ impl Display for Value {
             &Value::Char(v) => write!(f, "{}", v),
             &Value::Date(v) => write!(f, "{}", v),
             &Value::Enum => write!(f, "enum"),
-            &Value::Struct => write!(f, "struct"),
+            &Value::Struct(v) => write!(f, "{}", v),
             &Value::List(v) => write!(f, "{:?}", v),
             &Value::Map(v) => write!(f, "map"),
             &Value::Error(v) => write!(f, "{}", v),
