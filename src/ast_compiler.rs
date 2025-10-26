@@ -1,8 +1,9 @@
 use crate::ast_compiler::Expression::Variable;
 use crate::tokens::TokenType::{
     Bang, Bool, Char, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Greater,
-    GreaterEqual, I32, I64, Identifier, Integer, LeftParen, Less, LessEqual, Let, ListType,
-    MapType, Minus, Object, Plus, Print, RightParen, Slash, Star, Text, True, U32, U64,
+    GreaterEqual, GreaterGreater, I32, I64, Identifier, Integer, LeftParen, Less, LessEqual,
+    LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightParen, Slash, Star, Text,
+    True, U32, U64,
 };
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
@@ -105,59 +106,67 @@ impl AstCompiler {
     }
 
     fn expression(&mut self) -> anyhow::Result<Expression> {
-        self.equality()
+        self.or()
+    }
+
+    fn or(&mut self) -> anyhow::Result<Expression> {
+        let mut expr = self.and()?;
+        self.binary(vec![TokenType::LogicalOr], expr)
+    }
+
+    fn and(&mut self) -> anyhow::Result<Expression> {
+        let expr = self.bit_and()?;
+        self.binary(vec![TokenType::LogicalAnd], expr)
+    }
+
+    fn bit_and(&mut self) -> anyhow::Result<Expression> {
+        let expr = self.bit_or()?;
+        self.binary(vec![TokenType::BitAnd], expr)
+    }
+
+    fn bit_or(&mut self) -> anyhow::Result<Expression> {
+        let expr = self.bit_xor()?;
+        self.binary(vec![TokenType::BitOr], expr)
+    }
+
+    fn bit_xor(&mut self) -> anyhow::Result<Expression> {
+        let expr = self.equality()?;
+        self.binary(vec![TokenType::BitXor], expr)
     }
 
     fn equality(&mut self) -> anyhow::Result<Expression> {
-        let mut expr = self.comparison()?;
-        while self.match_token(vec![TokenType::BangEqual, TokenType::EqualEqual]) {
-            let operator = self.previous().clone();
-            let right = self.comparison()?;
-            expr = Expression::Binary {
-                line: operator.line,
-                left: Box::new(expr),
-                operator,
-                right: Box::new(right),
-            };
-        }
-        Ok(expr)
+        let expr = self.comparison()?;
+        self.binary(vec![TokenType::EqualEqual, TokenType::BangEqual], expr)
     }
 
     fn comparison(&mut self) -> anyhow::Result<Expression> {
+        let expr = self.bitshift()?;
+        self.binary(vec![Greater, GreaterEqual, Less, LessEqual], expr)
+    }
+
+    fn bitshift(&mut self) -> anyhow::Result<Expression> {
         let mut expr = self.term()?;
-        while self.match_token(vec![Greater, GreaterEqual, Less, LessEqual]) {
-            let operator = self.previous().clone();
-            let right = self.term()?;
-            expr = Expression::Binary {
-                line: operator.line,
-                left: Box::new(expr),
-                operator,
-                right: Box::new(right),
-            };
-        }
-        Ok(expr)
+        self.binary(vec![GreaterGreater, LessLess], expr)
     }
 
     fn term(&mut self) -> anyhow::Result<Expression> {
-        let mut expr = self.factor()?;
-        while self.match_token(vec![Minus, Plus]) {
-            let operator = self.previous().clone();
-            let right = self.factor()?;
-            expr = Expression::Binary {
-                line: operator.line,
-                left: Box::new(expr),
-                operator,
-                right: Box::new(right),
-            };
-        }
-        Ok(expr)
+        let expr = self.factor()?;
+        self.binary(vec![Minus, Plus], expr)
     }
 
     fn factor(&mut self) -> anyhow::Result<Expression> {
-        let mut expr = self.unary()?;
-        while self.match_token(vec![Slash, Star]) {
+        let expr = self.unary()?;
+        self.binary(vec![Slash, Star], expr)
+    }
+
+    fn binary(
+        &mut self,
+        types: Vec<TokenType>,
+        mut expr: Expression,
+    ) -> anyhow::Result<Expression> {
+        while self.match_token(types.clone()) {
             let operator = self.previous().clone();
-            let right = self.unary()?;
+            let right = self.comparison()?;
             expr = Expression::Binary {
                 line: operator.line,
                 left: Box::new(expr),
@@ -315,8 +324,8 @@ fn calculate_type(
             declared_type
         }
     } else {
-        match inferred_type{
-            Integer => I64,
+        match inferred_type {
+            Integer | I64 => I64,
             FloatingPoint => F64,
             Text => Text,
             Bool => Bool,
@@ -401,14 +410,16 @@ impl Expression {
     pub fn infer_type(&self) -> TokenType {
         match self {
             Self::Binary {
-                line,
                 left,
                 operator,
                 right,
+                ..
             } => {
                 let left_type = left.infer_type();
                 let right_type = right.infer_type();
-                if left_type == right_type {
+                if vec![Greater, Less, GreaterEqual, LessEqual].contains(&operator.token_type) {
+                    Bool
+                } else if left_type == right_type {
                     // map to determined numeric type if yet undetermined (32 or 64 bits)
                     match left_type {
                         FloatingPoint => F64,
@@ -426,6 +437,7 @@ impl Expression {
                             (FloatingPoint, _) => F64,
                             (Integer, FloatingPoint) => F64,
                             (Integer, _) => I64,
+                            (I64, Integer) => I64,
                             (F64, _) => F64,
                             (U64, U32) => U64,
                             (I64, I32) => I64,
@@ -442,6 +454,7 @@ impl Expression {
                         match (left_type, right_type) {
                             (FloatingPoint, _) => F64,
                             (Integer, FloatingPoint) => F64,
+                            (Integer, I64) => I64,
                             (I64, FloatingPoint) => F64,
                             (F64, _) => F64,
                             (U64, U32) => U64,

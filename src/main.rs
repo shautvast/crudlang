@@ -6,8 +6,9 @@ use crudlang::vm::{interpret, Vm};
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    let tokens = scan(r#"let a = 42
+    let tokens = scan(r#"let a = 1>2
 print a"#);
+    // println!("{:?}", tokens);
     match ast_compiler::compile(tokens) {
         Ok(statements) => {
             println!("{:?}", statements);
