@@ -4,16 +4,21 @@ use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_CHAR, OP_DEF_DATE,
-    OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_MAP, OP_DEF_STRUCT, OP_DEF_STRING,
-    OP_DEFINE, OP_DIVIDE, OP_EQUAL, OP_FALSE, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS,
-    OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR,
-    OP_SUBTRACT, OP_TRUE,
+    OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_MAP, OP_DEF_STRING, OP_DEF_STRUCT,
+    OP_DEFINE, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL,
+    OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
 use anyhow::anyhow;
 use std::collections::HashMap;
-use std::mem::discriminant;
 use std::sync::LazyLock;
 use tracing::debug;
+
+macro_rules! parse_num {
+    ($s:ident, $variant:ident, $number:ident) => {{
+        $s.typestack.push(TokenType::$variant);
+        Value::$variant($number.parse()?)
+    }};
+}
 
 pub fn compile(source: &str) -> anyhow::Result<Chunk> {
     let tokens = scan(source);
@@ -26,7 +31,7 @@ pub fn compile(source: &str) -> anyhow::Result<Chunk> {
         current_token: &tokens[0],
         tokens: &tokens,
         current: 0,
-        types: vec![],
+        typestack: vec![],
         locals: vec![],
         previous: 0,
         had_error: false,
@@ -41,7 +46,7 @@ struct Compiler<'a> {
     current: usize,
     previous_token: &'a Token,
     current_token: &'a Token,
-    types: Vec<Token>,
+    typestack: Vec<TokenType>,
     locals: Vec<String>,
     previous: usize,
     had_error: bool,
@@ -279,16 +284,25 @@ impl Rule {
     }
 }
 
-fn number(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
+fn number(s: &mut Compiler, mut expected_type: Option<TokenType>) -> anyhow::Result<()> {
+    debug!("number: expected type {:?}", expected_type);
+
+    // coerce unknown numeric type to the expected type of the expression if any
+    if let None = expected_type {
+        if !s.typestack.is_empty() {
+            expected_type = Some(*s.typestack.last().unwrap());
+        }
+    }
+
     let number = &s.previous_token.lexeme;
     let value = if let Some(expected_type) = expected_type {
         match expected_type {
-            TokenType::I32 => Value::I32(number.parse()?),
-            TokenType::I64 => Value::I64(number.parse()?),
-            TokenType::U32 => Value::U32(number.parse()?),
-            TokenType::U64 => Value::U64(number.parse()?),
-            TokenType::F32 => Value::U32(number.parse()?),
-            TokenType::F64 => Value::U64(number.parse()?),
+            TokenType::I32 => parse_num!(s, I32, number),
+            TokenType::I64 => parse_num!(s, I64, number),
+            TokenType::U32 => parse_num!(s, U32, number),
+            TokenType::U64 => parse_num!(s, U64, number),
+            TokenType::F32 => parse_num!(s, F32, number),
+            TokenType::F64 => parse_num!(s, F64, number),
 
             _ => {
                 return Err(anyhow!(
@@ -300,14 +314,10 @@ fn number(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<
             }
         }
     } else {
-        if let TokenType::Number = s.previous_token.token_type {
-            if number.contains('.') {
-                Value::F64(number.parse()?)
-            } else {
-                Value::I64(number.parse()?)
-            }
-        } else {
-            return Err(anyhow!("I did not think this would happen"));
+        match s.previous_token.token_type {
+            TokenType::Integer => Value::I64(number.parse()?),
+            TokenType::FloatingPoint => Value::F64(number.parse()?),
+            _ => panic!("I did not think this would happen")
         }
     };
     s.emit_constant(value);
@@ -318,11 +328,21 @@ fn literal(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result
     let actual_type = &s.previous_token.token_type;
     if let Some(expected_type) = expected_type {
         match (actual_type, expected_type) {
-            (TokenType::False, TokenType::Bool) => s.emit_constant(Value::Bool(false)),
-            (TokenType::True, TokenType::Bool) => s.emit_constant(Value::Bool(true)),
+            (TokenType::False, TokenType::Bool) => {
+                s.typestack.push(TokenType::Bool);
+                s.emit_constant(Value::Bool(false))
+            }
+            (TokenType::True, TokenType::Bool) => {
+                s.typestack.push(TokenType::Bool);
+                s.emit_constant(Value::Bool(true))
+            }
             (TokenType::Text, TokenType::String) => {
+                s.typestack.push(TokenType::String);
                 s.emit_constant(Value::String(s.previous_token.lexeme.clone()))
             }
+            //list
+            //map
+            //struct value
             _ => {
                 return Err(anyhow!(
                     "Invalid type: expected {} value, got {}({})",
@@ -343,11 +363,11 @@ fn literal(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result
     Ok(())
 }
 
-fn skip(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
+fn skip(s: &mut Compiler, _expected_type: Option<TokenType>) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn grouping(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
+fn grouping(s: &mut Compiler, _expected_type: Option<TokenType>) -> anyhow::Result<()> {
     s.expression(None)?;
     s.consume(TokenType::RightParen, "Expect ')' after expression.")
 }
@@ -372,6 +392,7 @@ fn unary(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<(
 fn binary(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result<()> {
     let operator_type = &s.previous_token.token_type;
     debug!("operator {:?}", operator_type);
+    debug!("expected type {:?}", expected_type);
     let rule = get_rule(operator_type);
     s.parse_precedence(rule.precedence + 1, None)?;
     match operator_type {
@@ -429,6 +450,7 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
         Rule::new(None, Some(binary), PREC_EQUALITY),
     );
     rules.insert(TokenType::False, Rule::new(Some(literal), None, PREC_NONE));
+    rules.insert(TokenType::FloatingPoint, Rule::new(Some(number), None, PREC_NONE));
     rules.insert(
         TokenType::Greater,
         Rule::new(None, Some(binary), PREC_COMPARISON),
@@ -447,12 +469,13 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
         TokenType::Identifier,
         Rule::new(Some(variable), None, PREC_NONE),
     );
+    rules.insert(TokenType::Integer, Rule::new(Some(number), None, PREC_NONE));
     rules.insert(TokenType::Indent, Rule::new(Some(skip), None, PREC_NONE));
     rules.insert(TokenType::LeftBrace, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::LeftBracket, Rule::new(None, None, PREC_NONE));
     rules.insert(
         TokenType::LeftParen,
-        Rule::new(Some(binary), None, PREC_NONE),
+        Rule::new(Some(grouping), None, PREC_NONE),
     );
     rules.insert(
         TokenType::Less,
@@ -475,7 +498,6 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
         TokenType::Minus,
         Rule::new(Some(unary), Some(binary), PREC_TERM),
     );
-    rules.insert(TokenType::Number, Rule::new(Some(number), None, PREC_NONE));
     rules.insert(TokenType::Plus, Rule::new(None, Some(binary), PREC_TERM));
     rules.insert(TokenType::Print, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Return, Rule::new(None, None, PREC_NONE));

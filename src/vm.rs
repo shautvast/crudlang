@@ -19,31 +19,36 @@ macro_rules! define_var {
     }};
 }
 
+pub struct Vm {
+    chunk: Chunk,
+    ip: usize,
+    stack: Vec<Value>,
+    local_vars: HashMap<String, Value>,
+    error_occurred: bool,
+}
+
 pub fn interpret(chunk: Chunk) -> anyhow::Result<Value> {
     let mut vm = Vm {
         chunk,
         ip: 0,
         stack: vec![],
         local_vars: HashMap::new(),
+        error_occurred: false,
     };
     vm.run()
-}
-
-pub struct Vm {
-    chunk: Chunk,
-    ip: usize,
-    stack: Vec<Value>,
-    local_vars: HashMap<String, Value>,
 }
 
 impl Vm {
     fn run(&mut self) -> anyhow::Result<Value> {
         loop {
+            if self.error_occurred {
+                return Err(anyhow!("Error occurred"));
+            }
             debug!("{:?}", self.stack);
             let opcode = self.chunk.code[self.ip];
             self.ip += 1;
             match opcode {
-                OP_CONSTANT | OP_FALSE | OP_TRUE => {
+                OP_CONSTANT => {
                     let value = &self.chunk.constants[self.chunk.code[self.ip] as usize];
                     self.ip += 1;
                     self.push(value.clone());
@@ -104,7 +109,7 @@ impl Vm {
                 OP_DEF_F64 => define_var!(self, F64),
                 OP_DEF_STRING => define_var!(self, String),
                 OP_DEF_CHAR => define_var!(self, Char),
-                OP_DEF_BOOL =>define_var!(self, Bool),
+                OP_DEF_BOOL => define_var!(self, Bool),
                 OP_DEF_DATE => define_var!(self, Date),
                 OP_DEF_LIST => define_var!(self, List),
                 OP_DEF_MAP => define_var!(self, Map),
@@ -148,7 +153,10 @@ fn binary_op(vm: &mut Vm, op: impl Fn(&Value, &Value) -> anyhow::Result<Value> +
     let result = op(&a, &b);
     match result {
         Ok(result) => vm.push(result),
-        Err(e) => println!("Error: {} {:?} and {:?}", e.to_string(), a, b),
+        Err(e) => {
+            println!("Error: {} {:?} and {:?}", e.to_string(), a, b);
+            vm.error_occurred = true;
+        }
     }
 }
 
@@ -169,8 +177,8 @@ pub const OP_DIVIDE: u16 = 5;
 pub const OP_NEGATE: u16 = 6;
 pub const OP_PRINT: u16 = 7;
 pub const OP_RETURN: u16 = 8;
-pub const OP_TRUE: u16 = 9;
-pub const OP_FALSE: u16 = 10;
+// pub const OP_TRUE: u16 = 9;
+// pub const OP_FALSE: u16 = 10; // obsolete, vacant space
 pub const OP_AND: u16 = 11;
 pub const OP_OR: u16 = 12;
 pub const OP_NOT: u16 = 13;
@@ -186,7 +194,7 @@ pub const OP_BITXOR: u16 = 22;
 pub const OP_SHR: u16 = 23;
 pub const OP_SHL: u16 = 24;
 pub const OP_POP: u16 = 25;
-pub const OP_DEFINE: u16 = 26;// may be obsolete already
+pub const OP_DEFINE: u16 = 26; // may be obsolete already
 pub const OP_GET: u16 = 27;
 pub const OP_DEF_I32: u16 = 28;
 pub const OP_DEF_I64: u16 = 29;

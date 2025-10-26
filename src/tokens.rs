@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
@@ -23,7 +23,7 @@ enum Value {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy, Hash)]
-pub(crate) enum TokenType {
+pub enum TokenType {
     Bang,
     BangEqual,
     BitAnd,
@@ -52,9 +52,10 @@ pub(crate) enum TokenType {
     Hash,
     I32,
     I64,
+    Identifier,
     If,
     Indent,
-    Identifier,
+    Integer, //undetermined integer type
     LeftBrace,
     LeftBracket,
     LeftParen,
@@ -68,7 +69,7 @@ pub(crate) enum TokenType {
     LogicalOr,
     Minus,
     Not,
-    Number,
+    FloatingPoint, //undetermined float type
     Object,
     Plus,
     Print,
@@ -101,13 +102,14 @@ impl fmt::Display for TokenType {
             TokenType::F32 => write!(f, "f32"),
             TokenType::F64 => write!(f, "f64"),
             TokenType::Bool => write!(f, "bool"),
-            TokenType::Bang=> write!(f, "!"),
-            TokenType::BangEqual=> write!(f, "!="),
-            TokenType::BitAnd=> write!(f, "&"),
-            TokenType::BitOr=> write!(f, "|"),
-            TokenType::BitXor=> write!(f, "^"),
-            TokenType::Colon=> write!(f, ":"),
-            TokenType::Comma=> write!(f, ","),
+            TokenType::Bang => write!(f, "!"),
+            TokenType::BangEqual => write!(f, "!="),
+            TokenType::BitAnd => write!(f, "&"),
+            TokenType::BitOr => write!(f, "|"),
+            TokenType::BitXor => write!(f, "^"),
+            TokenType::Colon => write!(f, ":"),
+            TokenType::Comma => write!(f, ","),
+            TokenType::FloatingPoint => write!(f, "float"),
             TokenType::MapType => write!(f, "map"),
             TokenType::ListType => write!(f, "list"),
             TokenType::Dot => write!(f, "."),
@@ -125,8 +127,9 @@ impl fmt::Display for TokenType {
             TokenType::GreaterGreater => write!(f, ">>"),
             TokenType::Hash => write!(f, "#"),
             TokenType::If => write!(f, "if"),
-            TokenType::Indent => write!(f, "indent"),
             TokenType::Identifier => write!(f, "identifier"),
+            TokenType::Indent => write!(f, "indent"),
+            TokenType::Integer => write!(f, "integer"),
             TokenType::LeftBrace => write!(f, "{{"),
             TokenType::LeftBracket => write!(f, "["),
             TokenType::LeftParen => write!(f, "("),
@@ -138,7 +141,6 @@ impl fmt::Display for TokenType {
             TokenType::LogicalOr => write!(f, "||"),
             TokenType::Minus => write!(f, "-"),
             TokenType::Not => write!(f, "not"),
-            TokenType::Number => write!(f, "number"),
             TokenType::Object => write!(f, "object"),
             TokenType::Plus => write!(f, "+"),
             TokenType::Print => write!(f, "print"),
@@ -157,6 +159,4 @@ impl fmt::Display for TokenType {
     }
 }
 
-impl Eq for TokenType {
-
-}
+impl Eq for TokenType {}

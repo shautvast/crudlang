@@ -1,4 +1,4 @@
-use crate::tokens::TokenType::BitXor;
+use crate::tokens::TokenType::{BitXor, FloatingPoint, Integer};
 use crate::{
     keywords,
     tokens::{
@@ -12,7 +12,7 @@ pub fn scan(source: &str) -> Vec<Token> {
         chars: source.chars().collect(),
         current: 0,
         start: 0,
-        line: 0,
+        line: 1,
         tokens: vec![],
         new_line: true,
     };
@@ -51,7 +51,7 @@ impl Scanner {
                 '-' => self.add_token(TokenType::Minus),
                 '+' => self.add_token(TokenType::Plus),
                 ':' => self.add_token(TokenType::Colon),
-                ';' => self.add_token(TokenType::Semicolon),
+                ';' => println!("Warning: Ignoring semicolon at line {}", self.line),
                 '*' => self.add_token(TokenType::Star),
                 '!' => {
                     let t = if self.match_next('=') {
@@ -150,8 +150,9 @@ impl Scanner {
         while is_digit(self.peek()) {
             self.advance();
         }
-
+        let mut has_dot = false;
         if self.peek() == '.' && is_digit(self.peek_next()) {
+            has_dot = true;
             self.advance();
         }
 
@@ -159,7 +160,7 @@ impl Scanner {
             self.advance();
         }
         let value: String = self.chars[self.start..self.current].iter().collect();
-        self.add_token_with_value(TokenType::Number, value);
+        self.add_token_with_value(if has_dot { FloatingPoint } else { Integer }, value);
     }
 
     fn string(&mut self) {

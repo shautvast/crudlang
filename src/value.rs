@@ -2,31 +2,31 @@ use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::fmt::{write, Display, Formatter};
+use std::fmt::{Display, Formatter, write};
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
 
 #[derive(Debug, Clone)]
 pub struct StructDefinition {
-    fields: Vec<String>
+    fields: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-pub struct Instance {
+pub struct StructValue {
     definition: StructDefinition,
-    fields: Vec<Value>
+    fields: Vec<Value>,
 }
 
-impl Instance {
+impl StructValue {
     pub fn new(definition: StructDefinition) -> Self {
         Self {
             definition,
-            fields: Vec::new()
+            fields: Vec::new(),
         }
     }
 }
 
-impl Display for Instance {
+impl Display for StructValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         for (i, field) in self.definition.fields.iter().enumerate() {
             write!(f, "{}: {}", field, self.fields[i])?;
@@ -50,9 +50,9 @@ pub enum Value {
     Enum,
     List(Vec<Value>),
     Map(HashMap<Value, Value>),
-    Struct(Instance),
+    Struct(StructValue),
     Error(String),
-    Void
+    Void,
 }
 
 impl Into<Value> for i32 {
@@ -219,7 +219,6 @@ impl Mul<&Value> for &Value {
             (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a * b)),
             (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a * b)),
             (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a * b)),
-            //enum?
             _ => Err(anyhow!("Cannot multiply")),
         }
     }
@@ -338,7 +337,8 @@ impl PartialEq for Value {
             (Value::Map(a), Value::Map(b)) => {
                 let mut equal = true;
                 for (k, v) in a.iter() {
-                    if !b.contains_key(k) || b.get(k).unwrap() != v { //safe unwrap
+                    if !b.contains_key(k) || b.get(k).unwrap() != v {
+                        //safe unwrap
                         equal = false;
                         break;
                     }
@@ -359,8 +359,8 @@ impl PartialOrd for Value {
             (Value::I32(a), Value::I32(b)) => Some(a.partial_cmp(b)?),
             (Value::I64(a), Value::I64(b)) => Some(a.partial_cmp(b)?),
             (Value::U32(a), Value::U32(b)) => Some(a.partial_cmp(b)?),
-            (Value::U64(a), Value::U64(b)) =>Some(a.partial_cmp(b)?),
-            (Value::F32(a), Value::F32(b)) =>Some(a.partial_cmp(b)?),
+            (Value::U64(a), Value::U64(b)) => Some(a.partial_cmp(b)?),
+            (Value::F32(a), Value::F32(b)) => Some(a.partial_cmp(b)?),
             (Value::F64(a), Value::F64(b)) => Some(a.partial_cmp(b)?),
             (Value::String(a), Value::String(b)) => Some(a.partial_cmp(b)?),
             (Value::Char(a), Value::Char(b)) => Some(a.partial_cmp(b)?),
@@ -370,7 +370,7 @@ impl PartialOrd for Value {
     }
 }
 
-impl Hash for Value{
+impl Hash for Value {
     fn hash<H: Hasher>(&self, state: &mut H) {
         std::mem::discriminant(self).hash(state);
 

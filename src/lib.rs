@@ -5,3 +5,5 @@ pub mod scanner;
 mod tokens;
 mod value;
 pub mod vm;
+pub mod ast_compiler;
+pub mod bytecode_compiler;
