@@ -6,12 +6,13 @@ use crudlang::vm::{interpret, Vm};
 fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
-    let tokens = scan(r#"let a = ((1+2)*3.0)*4"#);
+    let tokens = scan(r#"let a = 42
+print a"#);
     match ast_compiler::compile(tokens) {
         Ok(statements) => {
-            // println!("{:?}", statements);
+            println!("{:?}", statements);
             let chunk = compile(statements)?;
-            // chunk.disassemble();
+            chunk.disassemble();
             interpret(chunk);
         }
         Err(e) => {

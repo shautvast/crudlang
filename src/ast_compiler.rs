@@ -1,11 +1,12 @@
-use log::debug;
+use crate::ast_compiler::Expression::Variable;
 use crate::tokens::TokenType::{
     Bang, Bool, Char, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Greater,
     GreaterEqual, I32, I64, Identifier, Integer, LeftParen, Less, LessEqual, Let, ListType,
-    MapType, Minus, Object, Plus, Print, RightParen, Slash, Star, String, Text, True, U32, U64,
+    MapType, Minus, Object, Plus, Print, RightParen, Slash, Star, Text, True, U32, U64,
 };
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
+use log::debug;
 
 pub fn compile(tokens: Vec<Token>) -> anyhow::Result<Vec<Statement>> {
     let mut compiler = AstCompiler::new(tokens);
@@ -16,6 +17,7 @@ struct AstCompiler {
     tokens: Vec<Token>,
     current: usize,
     had_error: bool,
+    vars: Vec<Expression>,
 }
 
 impl AstCompiler {
@@ -24,6 +26,7 @@ impl AstCompiler {
             tokens,
             current: 0,
             had_error: false,
+            vars: vec![],
         }
     }
 
@@ -44,7 +47,7 @@ impl AstCompiler {
     }
 
     fn let_declaration(&mut self) -> anyhow::Result<Statement> {
-        let name = self.consume(Identifier, "Expect variable name.")?;
+        let name_token = self.consume(Identifier, "Expect variable name.")?;
 
         let declared_type = if self.check(Colon) {
             self.advance();
@@ -61,13 +64,18 @@ impl AstCompiler {
             let var_type = match calculate_type(declared_type, inferred_type) {
                 Ok(var_type) => var_type,
                 Err(e) => {
-                    println!("error at line {}", name.line);
+                    println!("error at line {}", name_token.line);
                     self.had_error = true;
                     return Err(e);
                 }
             };
+            self.vars.push(Variable {
+                name: name_token.lexeme.to_string(),
+                var_type,
+                line: name_token.line,
+            });
             Ok(Statement::VarStmt {
-                name,
+                name: name_token,
                 var_type,
                 initializer,
             })
@@ -213,7 +221,24 @@ impl AstCompiler {
                 expression: Box::new(expr),
             }
         } else {
-            unimplemented!()
+            let token = self.advance().clone();
+            let (var_name, var_type) = self
+                .vars
+                .iter()
+                .filter_map(|e| {
+                    if let Variable { name, var_type, .. } = e {
+                        Some((name, var_type))
+                    } else {
+                        None
+                    }
+                })
+                .find(|e| e.0 == &token.lexeme)
+                .ok_or_else(|| return anyhow::anyhow!("Unknown variable: {}", token.lexeme))?;
+            Variable {
+                name: var_name.to_string(),
+                var_type: var_type.clone(),
+                line: token.line,
+            }
         })
     }
 
@@ -290,7 +315,17 @@ fn calculate_type(
             declared_type
         }
     } else {
-        inferred_type
+        match inferred_type{
+            Integer => I64,
+            FloatingPoint => F64,
+            Text => Text,
+            Bool => Bool,
+            Date => Date,
+            ListType => ListType,
+            MapType => MapType,
+            Object => Object,
+            _ => panic!("Unexpected type"),
+        }
     })
 }
 
@@ -345,30 +380,24 @@ pub enum Expression {
         literaltype: TokenType,
         value: Value,
     },
+    Variable {
+        line: usize,
+        name: String,
+        var_type: TokenType,
+    },
 }
 
 impl Expression {
     pub fn line(&self) -> usize {
         match self {
-            Expression::Binary {
-                line,
-                left,
-                operator,
-                right,
-            } => *line,
-            Expression::Unary {
-                line,
-                operator,
-                right,
-            } => *line,
-            Expression::Grouping { line, expression } => *line,
-            Expression::Literal {
-                line,
-                literaltype,
-                value,
-            } => *line,
+            Self::Binary { line, .. } => *line,
+            Self::Unary { line, .. } => *line,
+            Self::Grouping { line, expression } => *line,
+            Self::Literal { line, .. } => *line,
+            Self::Variable { line, .. } => *line,
         }
     }
+
     pub fn infer_type(&self) -> TokenType {
         match self {
             Self::Binary {
@@ -390,7 +419,7 @@ impl Expression {
                     if let Plus = operator.token_type {
                         // includes string concatenation with numbers
                         // followed by type coercion to 64 bits for numeric types
-                        debug!("coerce {} : {}",left_type,right_type);
+                        debug!("coerce {} : {}", left_type, right_type);
                         match (left_type, right_type) {
                             (_, Text) => Text,
                             (Text, _) => Text,
@@ -409,7 +438,7 @@ impl Expression {
                         // so if my thinking is wrong or incomplete it will panic
                     } else {
                         // type coercion to 64 bits for numeric types
-                        debug!("coerce {} : {}",left_type,right_type);
+                        debug!("coerce {} : {}", left_type, right_type);
                         match (left_type, right_type) {
                             (FloatingPoint, _) => F64,
                             (Integer, FloatingPoint) => F64,
@@ -424,16 +453,9 @@ impl Expression {
                 }
             }
             Self::Grouping { line, expression } => expression.infer_type(),
-            Self::Literal {
-                line,
-                literaltype,
-                value,
-            } => literaltype.clone(),
-            Self::Unary {
-                line,
-                operator,
-                right,
-            } => right.infer_type(),
+            Self::Literal { literaltype, .. } => literaltype.clone(),
+            Self::Unary { right, .. } => right.infer_type(),
+            Self::Variable { var_type, .. } => var_type.clone(),
         }
     }
 }

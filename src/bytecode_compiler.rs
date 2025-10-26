@@ -1,8 +1,15 @@
+use std::collections::HashMap;
 use crate::ast_compiler::{Expression, Statement};
 use crate::chunk::Chunk;
 use crate::tokens::TokenType;
 use crate::value::Value;
-use crate::vm::{OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_CHAR, OP_DEF_DATE, OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_MAP, OP_DEF_STRING, OP_DEF_STRUCT, OP_DEFINE, OP_DIVIDE, OP_EQUAL, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT, OP_DEF_F32, OP_GET, OP_PRINT};
+use crate::vm::{
+    OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_CHAR, OP_DEF_DATE,
+    OP_DEF_F32, OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_MAP, OP_DEF_STRING,
+    OP_DEF_STRUCT, OP_DEFINE, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS,
+    OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR,
+    OP_SUBTRACT,
+};
 
 pub fn compile(ast: Vec<Statement>) -> anyhow::Result<Chunk> {
     let compiler = Compiler::new();
@@ -13,6 +20,7 @@ struct Compiler {
     chunk: Chunk,
     had_error: bool,
     current_line: usize,
+    vars: HashMap<String, usize>,
 }
 
 impl Compiler {
@@ -21,6 +29,7 @@ impl Compiler {
             chunk: Chunk::new("main"),
             had_error: false,
             current_line: 0,
+            vars: HashMap::new(),
         }
     }
 
@@ -41,11 +50,12 @@ impl Compiler {
                 var_type,
                 initializer,
             } => {
-                let name_index= self.chunk.add_constant(Value::String(name.lexeme.clone()));
+                let name_index = self.chunk.add_constant(Value::String(name.lexeme.clone()));
+                self.vars.insert(name.lexeme.clone(),name_index);
                 self.compile_expression(initializer)?;
                 self.define_variable(var_type, name_index)?
             }
-            Statement::Print {value} => {
+            Statement::Print { value } => {
                 self.compile_expression(value)?;
                 self.emit_byte(OP_PRINT);
             }
@@ -56,6 +66,10 @@ impl Compiler {
 
     fn compile_expression(&mut self, expression: &Expression) -> anyhow::Result<()> {
         match expression {
+            Expression::Variable {name, ..} => {
+                let name_index = self.vars.get(name).unwrap();
+                self.emit_bytes(OP_GET, *name_index as u16);
+            }
             Expression::Literal { value, .. } => self.emit_constant(value),
             Expression::Grouping { expression, .. } => self.compile_expression(expression)?,
             Expression::Unary {

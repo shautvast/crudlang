@@ -4,7 +4,7 @@ use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_MULTIPLY,
     OP_NEGATE, OP_RETURN, OP_SUBTRACT, OP_NOT, OP_SHL, OP_SHR, OP_LESS, OP_LESS_EQUAL,
     OP_GREATER, OP_GREATER_EQUAL, OP_EQUAL, OP_PRINT, OP_POP, OP_DEFINE, OP_GET,OP_DEF_STRING,
-    OP_DEF_I32, OP_DEF_BOOL, OP_DEF_F32, OP_DEF_F64,
+    OP_DEF_I32, OP_DEF_I64, OP_DEF_F32, OP_DEF_F64, OP_DEF_BOOL
 };
 
 pub struct Chunk {
@@ -75,6 +75,7 @@ impl Chunk {
             OP_DEFINE => self.constant_inst("DEF", offset),
             OP_DEF_STRING => self.constant_inst("DEFSTR", offset),
             OP_DEF_I32 => self.constant_inst("DEFI32", offset),
+            OP_DEF_I64 => self.constant_inst("DEFI64", offset),
             OP_DEF_F32 => self.constant_inst("DEFF32", offset),
             OP_DEF_F64 => self.constant_inst("DEFF64", offset),
             OP_DEF_BOOL => self.constant_inst("DEFBOOL", offset),
