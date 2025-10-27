@@ -9,7 +9,7 @@ fn main() -> anyhow::Result<()> {
     let tokens = scan(
         r#"
 fn main(a: string) -> u32:
-  a + 42
+    a + 42
 let text = "hello "
 main(text)"#,
     );
@@ -25,24 +25,6 @@ main(text)"#,
             println!("{}", e)
         }
     }
-
-    // println!("{}",expression.infer_type());
-
-    // let chunk = crudlang::compiler::compile(
-    //     r#"let a ="hello " + 42"#,
-    // );
-    // match chunk {
-    //     Err(e) => {
-    //         println!("{}", e);
-    //         return Ok(());
-    //     }
-    //     Ok(chunk) => {
-    //         chunk.disassemble();
-    //
-    //         let result = crudlang::vm::interpret(chunk)?;
-    //         println!("{}", result);
-    //     }
-    // }
 
     Ok(())
 }

@@ -1,9 +1,12 @@
 # crud-lang
 
-_This is now in first-draft phase. Meaning, I just had the idea and I am jotting down very preliminary design decisions._
-
+## What is this?
 - an experimental language for CRUD applications (backend only though, I think)
 - Enterprise as a first-class citizen
+  - built in types for dates and uuid for example
+  - collection literals
+  - ease of use for CRUD operations, like automatic mapping from sql rows to json
+- a simple, yet powerful language
 - urls are made up of directories and filenames
 - a controller sourcefile is a file with the .ctl extension
 - likewise:
@@ -16,6 +19,7 @@ _This is now in first-draft phase. Meaning, I just had the idea and I am jotting
 - there is a strict calling hierarchy. A service can not call a controller. It can only go 'down'.
 - Services can not call other services, because that is the recipe for spaghetti. Refactor your logic, abstract and put lower level code in utilities.
 - Utilities are allowed to call other utilities. OMG, spaghetti after all! TBD
+- Automatic memory management using an arena per call
 
 - It is an interpreter written in rust. OMG!
 - And it has everything I like in other languages
@@ -28,6 +32,7 @@ _This is now in first-draft phase. Meaning, I just had the idea and I am jotting
     - nice iterators.
     - First class functions? Maybe...
     - automatic mapping from database to object to json
+    - indenting like python
 
 **types**
 
@@ -35,7 +40,7 @@ _This is now in first-draft phase. Meaning, I just had the idea and I am jotting
 - u64, i64
 - f32, f64,
 - string, bool, char
-- struct enum
+- struct, enum
 - date
 
 **question**
@@ -44,6 +49,34 @@ _This is now in first-draft phase. Meaning, I just had the idea and I am jotting
 - middleware, implement later
 - JWT tokens, I guess
 
-**the example im /src: **
+**the example in /src: **
 
 - a very simple api that listens to GET /api/customers{:id} and returns a customer from the database
+
+## Design
+* heavily inspired by Crafting Interpreters
+* language influences from rust and python
+* compiler first creates an AST and then compiles to bytecode (no file format yet)
+* uses a stack-based virtual machine
+
+## status:
+* compiler and runtime are still limited but working
+* supports:
+  * basic types:
+    * 32/64 bit integers, signed and unsigned
+    * 32/64 bit floats
+    * strings
+    * bools
+    * chars
+  * type checking and type inference (although it needs more testing)
+  * arithmetic expressions
+  * function declaration and calling
+  * indenting like python (for now just 1 level, but both tabs or double spaces)
+  * strict typing like in rust (no implicit numeric conversions)
+  * basic set of operators, including logical and/or and bitwise operations
+  
+## What's next?
+- collection types: list and map
+- object/struct types
+- control flow
+- tests
