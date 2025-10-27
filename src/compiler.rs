@@ -84,7 +84,7 @@ impl<'a> Compiler<'a> {
                 | TokenType::U32
                 | TokenType::U64
                 | TokenType::Date
-                | TokenType::String
+                | TokenType::StringType
                 | TokenType::Char
                 | TokenType::Bool
                 | TokenType::ListType
@@ -129,14 +129,14 @@ impl<'a> Compiler<'a> {
             Some(TokenType::U32) => OP_DEF_I64,
             Some(TokenType::U64) => OP_DEF_I64,
             Some(TokenType::Date) => OP_DEF_DATE,
-            Some(TokenType::String) => OP_DEF_STRING,
+            Some(TokenType::StringType) => OP_DEF_STRING,
             Some(TokenType::Char) => OP_DEF_CHAR,
             Some(TokenType::Bool) => OP_DEF_BOOL,
             Some(TokenType::ListType) => OP_DEF_LIST,
             Some(TokenType::MapType) => OP_DEF_MAP,
             Some(TokenType::Object) => OP_DEF_STRUCT,
             _ => match derived_type {
-                Some(TokenType::Text) => OP_DEF_STRING,
+                Some(TokenType::StringType) => OP_DEF_STRING,
                 Some(TokenType::Bool) => OP_DEF_BOOL,
                 Some(TokenType::Char) => OP_DEF_CHAR,
                 Some(TokenType::F64) => OP_DEF_F64,
@@ -336,8 +336,8 @@ fn literal(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result
                 s.typestack.push(TokenType::Bool);
                 s.emit_constant(Value::Bool(true))
             }
-            (TokenType::Text, TokenType::String) => {
-                s.typestack.push(TokenType::String);
+            (TokenType::StringType, TokenType::StringType) => {
+                s.typestack.push(TokenType::StringType);
                 s.emit_constant(Value::String(s.previous_token.lexeme.clone()))
             }
             //list
@@ -356,7 +356,7 @@ fn literal(s: &mut Compiler, expected_type: Option<TokenType>) -> anyhow::Result
         match actual_type {
             TokenType::False => s.emit_constant(Value::Bool(false)),
             TokenType::True => s.emit_constant(Value::Bool(true)),
-            TokenType::Text => s.emit_constant(Value::String(s.previous_token.lexeme.clone())),
+            TokenType::StringType => s.emit_constant(Value::String(s.previous_token.lexeme.clone())),
             _ => {}
         }
     }
@@ -506,12 +506,12 @@ static RULES: LazyLock<HashMap<TokenType, Rule>> = LazyLock::new(|| {
     rules.insert(TokenType::RightBracket, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Slash, Rule::new(None, Some(binary), PREC_FACTOR));
     rules.insert(TokenType::Star, Rule::new(None, Some(binary), PREC_FACTOR));
-    rules.insert(TokenType::Text, Rule::new(Some(literal), None, PREC_NONE));
+    rules.insert(TokenType::StringType, Rule::new(Some(literal), None, PREC_NONE));
     rules.insert(
         TokenType::BitAnd,
         Rule::new(None, Some(binary), PREC_BITAND),
     );
-    rules.insert(TokenType::String, Rule::new(None, None, PREC_NONE));
+    rules.insert(TokenType::StringType, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::Struct, Rule::new(None, None, PREC_NONE));
     rules.insert(TokenType::True, Rule::new(Some(literal), None, PREC_NONE));
     rules.insert(TokenType::U32, Rule::new(None, None, PREC_NONE));

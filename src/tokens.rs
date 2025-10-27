@@ -78,21 +78,22 @@ pub enum TokenType {
     RightBrace,
     RightBracket,
     Semicolon,
+    SingleRightArrow,
     Slash,
     Star,
-    Text,
-    String,
+    StringType,
     Struct,
     True,
     U32,
     U64,
+    Void,
     While,
 }
 
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenType::String => write!(f, "string"),
+            TokenType::StringType => write!(f, "string"),
             TokenType::Date => write!(f, "date"),
             TokenType::Char => write!(f, "char"),
             TokenType::I32 => write!(f, "i32"),
@@ -149,11 +150,12 @@ impl fmt::Display for TokenType {
             TokenType::RightBrace => write!(f, "}}"),
             TokenType::RightBracket => write!(f, "]"),
             TokenType::Semicolon => write!(f, ";"),
+            TokenType::SingleRightArrow => write!(f, "->"),
             TokenType::Slash => write!(f, "/"),
             TokenType::Star => write!(f, "*"),
-            TokenType::Text => write!(f, "text"),
             TokenType::Struct => write!(f, "struct"),
             TokenType::True => write!(f, "true"),
+            TokenType::Void => write!(f, "()"),
             TokenType::While => write!(f, "while"),
         }
     }

@@ -48,7 +48,14 @@ impl Scanner {
                 ']' => self.add_token(TokenType::RightBracket),
                 ',' => self.add_token(TokenType::Comma),
                 '.' => self.add_token(TokenType::Dot),
-                '-' => self.add_token(TokenType::Minus),
+                '-' => {
+                    let t = if self.match_next('>') {
+                        TokenType::SingleRightArrow
+                    } else {
+                        TokenType::Minus
+                    };
+                    self.add_token(t);
+                }
                 '+' => self.add_token(TokenType::Plus),
                 ':' => self.add_token(TokenType::Colon),
                 ';' => println!("Warning: Ignoring semicolon at line {}", self.line),
@@ -180,7 +187,7 @@ impl Scanner {
         let value: String = self.chars[self.start + 1..self.current - 1]
             .iter()
             .collect();
-        self.add_token_with_value(TokenType::Text, value);
+        self.add_token_with_value(TokenType::StringType, value);
     }
 
     fn peek(&self) -> char {

@@ -1,17 +1,20 @@
-use crate::ast_compiler::Expression::Variable;
-use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Greater,
-    GreaterEqual, GreaterGreater, I32, I64, Identifier, Integer, LeftParen, Less, LessEqual,
-    LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightParen, Slash, Star, Text,
-    True, U32, U64,
-};
+use crate::tokens::TokenType::{Bang, Bool, Char, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightParen, SingleRightArrow, Slash, Star, True, U32, U64, StringType};
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use log::debug;
+use std::collections::HashMap;
 
 pub fn compile(tokens: Vec<Token>) -> anyhow::Result<Vec<Statement>> {
     let mut compiler = AstCompiler::new(tokens);
-    compiler.compile()
+    compiler.compile(0)
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct Function {
+    pub(crate) name: Token,
+    pub(crate) parameters: Vec<Parameter>,
+    pub(crate) return_type: TokenType,
+    pub(crate) body: Vec<Statement>,
 }
 
 struct AstCompiler {
@@ -19,6 +22,8 @@ struct AstCompiler {
     current: usize,
     had_error: bool,
     vars: Vec<Expression>,
+    indent: Vec<usize>,
+    functions: HashMap<String, Function>,
 }
 
 impl AstCompiler {
@@ -28,23 +33,107 @@ impl AstCompiler {
             current: 0,
             had_error: false,
             vars: vec![],
+            indent: vec![],
+            functions: HashMap::new(),
         }
     }
 
-    fn compile(&mut self) -> anyhow::Result<Vec<Statement>> {
+    fn compile(&mut self, expected_indent: usize) -> anyhow::Result<Vec<Statement>> {
         let mut statements = vec![];
         while !self.is_at_end() {
-            statements.push(self.declaration()?)
+            let statement = self.indent(expected_indent)?;
+            if let Some(statement) = statement {
+                statements.push(statement);
+            } else {
+                break;
+            }
         }
         Ok(statements)
     }
 
+    fn indent(&mut self, expected_indent: usize) -> anyhow::Result<Option<Statement>> {
+        // skip empty lines
+        while self.check(Eol) {
+            self.advance();
+        }
+
+        let mut indent_on_line = 0;
+        // keep track of indent level
+        while self.match_token(vec![Indent]) {
+            indent_on_line += 1;
+        }
+        if indent_on_line > expected_indent {
+            panic!(
+                "unexpected indent level {} vs {}",
+                indent_on_line, expected_indent
+            );
+        } else if indent_on_line < expected_indent {
+            self.indent.pop();
+            return Ok(None);
+        } else {
+            self.indent.push(indent_on_line);
+            Ok(Some(self.declaration()?))
+        }
+    }
+
     fn declaration(&mut self) -> anyhow::Result<Statement> {
-        if self.match_token(vec![Let]) {
+        if self.match_token(vec![Fn]) {
+            self.function_declaration()
+        } else if self.match_token(vec![Let]) {
             self.let_declaration()
         } else {
             self.statement()
         }
+    }
+
+    fn function_declaration(&mut self) -> anyhow::Result<Statement> {
+        let name_token = self.consume(Identifier, "Expect function name.")?;
+        self.consume(LeftParen, "Expect '(' after function name.")?;
+        let mut parameters = vec![];
+        while !self.check(RightParen) {
+            if parameters.len() >= 25 {
+                return Err(anyhow::anyhow!("Too many parameters."));
+            }
+            let parm_name = self.consume(Identifier, "Expect parameter name.")?;
+
+            self.consume(Colon, "Expect : after parameter name")?;
+            let var_type = self.peek().token_type;
+            self.vars.push(Expression::Variable {
+                name: parm_name.lexeme.to_string(),
+                var_type,
+                line: parm_name.line,
+            });
+            self.advance();
+            parameters.push(Parameter {
+                name: parm_name,
+                var_type,
+            });
+        }
+        self.consume(RightParen, "Expect ')' after parameters.")?;
+        let return_type = if self.check(SingleRightArrow) {
+            self.consume(SingleRightArrow, "")?;
+            self.advance().token_type
+        } else {
+            TokenType::Void
+        };
+        self.consume(Colon, "Expect colon (:) after function declaration.")?;
+        self.consume(Eol, "Expect end of line.")?;
+
+        let current_indent = self.indent.last().unwrap();
+        let body = self.compile(current_indent + 1)?;
+
+        let function = Function {
+            name: name_token.clone(),
+            parameters,
+            return_type,
+            body,
+        };
+
+        let function_stmt = Statement::FunctionStmt {
+            function: function.clone(),
+        };
+        self.functions.insert(name_token.lexeme, function.clone());
+        Ok(function_stmt)
     }
 
     fn let_declaration(&mut self) -> anyhow::Result<Statement> {
@@ -70,7 +159,7 @@ impl AstCompiler {
                     return Err(e);
                 }
             };
-            self.vars.push(Variable {
+            self.vars.push(Expression::Variable {
                 name: name_token.lexeme.to_string(),
                 var_type,
                 line: name_token.line,
@@ -95,8 +184,8 @@ impl AstCompiler {
 
     fn print_statement(&mut self) -> anyhow::Result<Statement> {
         let expr = self.expression()?;
-        self.consume(Eol, "Expect end of line after expression.")?;
-        Ok(Statement::Print { value: expr })
+        self.consume(Eol, "Expect end of line after print statement.")?;
+        Ok(Statement::PrintStmt { value: expr })
     }
 
     fn expr_statement(&mut self) -> anyhow::Result<Statement> {
@@ -192,6 +281,7 @@ impl AstCompiler {
     }
 
     fn primary(&mut self) -> anyhow::Result<Expression> {
+        debug!("primary {:?}", self.peek());
         Ok(if self.match_token(vec![False]) {
             Expression::Literal {
                 line: self.peek().line,
@@ -216,10 +306,10 @@ impl AstCompiler {
                 literaltype: FloatingPoint,
                 value: Value::F64(self.previous().lexeme.parse()?),
             }
-        } else if self.match_token(vec![Text]) {
+        } else if self.match_token(vec![StringType]) {
             Expression::Literal {
                 line: self.peek().line,
-                literaltype: Text,
+                literaltype: StringType,
                 value: Value::String(self.previous().lexeme.to_string()),
             }
         } else if self.match_token(vec![LeftParen]) {
@@ -231,23 +321,67 @@ impl AstCompiler {
             }
         } else {
             let token = self.advance().clone();
-            let (var_name, var_type) = self
-                .vars
-                .iter()
-                .filter_map(|e| {
-                    if let Variable { name, var_type, .. } = e {
-                        Some((name, var_type))
-                    } else {
-                        None
-                    }
-                })
-                .find(|e| e.0 == &token.lexeme)
-                .ok_or_else(|| return anyhow::anyhow!("Unknown variable: {}", token.lexeme))?;
-            Variable {
-                name: var_name.to_string(),
-                var_type: var_type.clone(),
-                line: token.line,
+            debug!("{:?}", token);
+            if self.match_token(vec![LeftParen]) {
+                self.function_call(token.lexeme)?
+            } else {
+                self.variable_lookup(&token)?
             }
+        })
+    }
+
+    fn variable_lookup(&mut self, token: &Token) -> anyhow::Result<Expression> {
+        let (var_name, var_type) = self
+            .vars
+            .iter()
+            .filter_map(|e| {
+                if let Expression::Variable { name, var_type, .. } = e {
+                    Some((name, var_type))
+                } else {
+                    None
+                }
+            })
+            .find(|e| e.0 == &token.lexeme)
+            .ok_or_else(|| return anyhow::anyhow!("Unknown variable: {:?}", token))?;
+        Ok(Expression::Variable {
+            name: var_name.to_string(),
+            var_type: var_type.clone(),
+            line: token.line,
+        })
+    }
+
+    fn function_call(&mut self, name: String) -> anyhow::Result<Expression> {
+        let function_name = self.functions.get(&name).unwrap().name.lexeme.clone();
+        let function = self.functions.get(&function_name).unwrap().clone();
+
+        let mut arguments = vec![];
+        while !self.match_token(vec![RightParen]) {
+            if arguments.len() >= 25 {
+                return Err(anyhow::anyhow!("Too many parameters."));
+            }
+            let arg = self.expression()?;
+            let arg_type = arg.infer_type();
+            if arg_type != function.parameters[arguments.len()].var_type {
+                return Err(anyhow::anyhow!(
+                    "Incompatible argument types. Expected {}, found {}",
+                    function.parameters[arguments.len()].var_type,
+                    arg_type
+                ));
+            }
+            arguments.push(arg);
+            if self.peek().token_type == TokenType::Comma {
+                self.advance();
+            } else {
+                self.consume(RightParen, "Expect ')' after arguments.")?;
+                break;
+            }
+        }
+        let return_type = self.functions.get(&name).unwrap().return_type;
+        Ok(Expression::FunctionCall {
+            line: self.peek().line,
+            name,
+            arguments,
+            return_type,
         })
     }
 
@@ -303,7 +437,9 @@ fn calculate_type(
     declared_type: Option<TokenType>,
     inferred_type: TokenType,
 ) -> anyhow::Result<TokenType> {
+    println!("declared type {:?} inferred type: {:?}", declared_type, inferred_type);
     Ok(if let Some(declared_type) = declared_type {
+
         if declared_type != inferred_type {
             match (declared_type, inferred_type) {
                 (I32, I64) => I32,
@@ -312,6 +448,7 @@ fn calculate_type(
                 (F64, I64) => F64,
                 (U64, I64) => U64,
                 (U64, I32) => U64,
+                (StringType, Text) => StringType,
                 _ => {
                     return Err(anyhow::anyhow!(
                         "Incompatible types. Expected {}, found {}",
@@ -338,7 +475,7 @@ fn calculate_type(
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     ExpressionStmt {
         expression: Expression,
@@ -348,8 +485,11 @@ pub enum Statement {
         var_type: TokenType,
         initializer: Expression,
     },
-    Print {
+    PrintStmt {
         value: Expression,
+    },
+    FunctionStmt {
+        function: Function,
     },
 }
 
@@ -357,17 +497,20 @@ impl Statement {
     pub fn line(&self) -> usize {
         match self {
             Statement::ExpressionStmt { expression } => expression.line(),
-            Statement::VarStmt {
-                name,
-                var_type,
-                initializer,
-            } => name.line,
-            Statement::Print { value } => value.line(),
+            Statement::VarStmt { name, .. } => name.line,
+            Statement::PrintStmt { value } => value.line(),
+            Statement::FunctionStmt { function, .. } => function.name.line,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct Parameter {
+    pub(crate) name: Token,
+    pub(crate) var_type: TokenType,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expression {
     Binary {
         line: usize,
@@ -394,6 +537,12 @@ pub enum Expression {
         name: String,
         var_type: TokenType,
     },
+    FunctionCall {
+        line: usize,
+        name: String,
+        arguments: Vec<Expression>,
+        return_type: TokenType,
+    },
 }
 
 impl Expression {
@@ -404,6 +553,7 @@ impl Expression {
             Self::Grouping { line, expression } => *line,
             Self::Literal { line, .. } => *line,
             Self::Variable { line, .. } => *line,
+            Self::FunctionCall { line, .. } => *line,
         }
     }
 
@@ -432,8 +582,8 @@ impl Expression {
                         // followed by type coercion to 64 bits for numeric types
                         debug!("coerce {} : {}", left_type, right_type);
                         match (left_type, right_type) {
-                            (_, Text) => Text,
-                            (Text, _) => Text,
+                            (_, StringType) => StringType,
+                            (StringType, _) => StringType,
                             (FloatingPoint, _) => F64,
                             (Integer, FloatingPoint) => F64,
                             (Integer, _) => I64,
@@ -469,6 +619,7 @@ impl Expression {
             Self::Literal { literaltype, .. } => literaltype.clone(),
             Self::Unary { right, .. } => right.infer_type(),
             Self::Variable { var_type, .. } => var_type.clone(),
+            Self::FunctionCall { return_type, .. } => return_type.clone(),
         }
     }
 }

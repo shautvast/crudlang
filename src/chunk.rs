@@ -1,10 +1,10 @@
-use tracing::debug;
+use std::collections::HashMap;
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CONSTANT, OP_DIVIDE, OP_MULTIPLY,
     OP_NEGATE, OP_RETURN, OP_SUBTRACT, OP_NOT, OP_SHL, OP_SHR, OP_LESS, OP_LESS_EQUAL,
     OP_GREATER, OP_GREATER_EQUAL, OP_EQUAL, OP_PRINT, OP_POP, OP_DEFINE, OP_GET,OP_DEF_STRING,
-    OP_DEF_I32, OP_DEF_I64, OP_DEF_F32, OP_DEF_F64, OP_DEF_BOOL
+    OP_DEF_I32, OP_DEF_I64, OP_DEF_F32, OP_DEF_F64, OP_DEF_BOOL, OP_CALL
 };
 
 pub struct Chunk {
@@ -12,7 +12,9 @@ pub struct Chunk {
     pub code: Vec<u16>,
     pub constants: Vec<Value>,
     lines: Vec<usize>,
+    pub(crate) functions: Vec<Chunk>
 }
+
 
 impl Chunk {
     pub fn new(name: &str) -> Chunk {
@@ -21,6 +23,7 @@ impl Chunk {
             code: Vec::new(),
             constants: vec![],
             lines: vec![],
+            functions: Vec::new(),
         }
     }
 
@@ -34,7 +37,15 @@ impl Chunk {
         self.constants.len() - 1
     }
 
+    pub fn add_function(&mut self, function: Chunk) -> usize {
+        self.functions.push(function);
+        self.functions.len() - 1
+    }
+
     pub fn disassemble(&self) {
+        for f in &self.functions{
+            f.disassemble();
+        }
         println!("== {} ==", self.name);
         let mut offset = 0;
         while offset < self.code.len() {
@@ -79,6 +90,7 @@ impl Chunk {
             OP_DEF_F32 => self.constant_inst("DEFF32", offset),
             OP_DEF_F64 => self.constant_inst("DEFF64", offset),
             OP_DEF_BOOL => self.constant_inst("DEFBOOL", offset),
+            OP_CALL => self.call_inst("CALL", offset),
             OP_GET => self.constant_inst("GET", offset),
             _ => {
                 println!("Unknown instruction {}", instruction);
@@ -90,6 +102,13 @@ impl Chunk {
     fn simple_inst(&self, name: &str, offset: usize) -> usize {
         println!("{}", name);
         offset + 1
+    }
+
+    fn call_inst(&self, name: &str, offset: usize) -> usize {
+        let constant = self.code[offset + 1];
+        let num_args = self.code[offset + 2];
+        println!("{} {}({}):", name, constant, num_args);
+        offset + 3
     }
 
     fn constant_inst(&self, name: &str, offset: usize) -> usize {

@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use tracing::debug;
 
 macro_rules! define_var {
-    ($self:ident, $variant:ident) => {{
-        let name = $self.read_constant();
+    ($self:ident, $variant:ident, $chunk:ident) => {{
+        let name = $self.read_name($chunk);
         let value = $self.pop();
         if let Value::$variant(_) = value {
             $self.local_vars.insert(name, value);
@@ -20,37 +20,47 @@ macro_rules! define_var {
 }
 
 pub struct Vm {
-    chunk: Chunk,
     ip: usize,
     stack: Vec<Value>,
     local_vars: HashMap<String, Value>,
     error_occurred: bool,
 }
 
-pub fn interpret(chunk: Chunk) -> anyhow::Result<Value> {
+pub fn interpret(chunk: &Chunk) -> anyhow::Result<Value> {
     let mut vm = Vm {
-        chunk,
         ip: 0,
         stack: vec![],
         local_vars: HashMap::new(),
         error_occurred: false,
     };
-    vm.run()
+    vm.run(chunk, vec![])
+}
+
+pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> anyhow::Result<Value> {
+    let mut vm = Vm {
+        ip: 0,
+        stack: vec![],
+        local_vars: HashMap::new(),
+        error_occurred: false,
+    };
+    vm.run(chunk, args)
 }
 
 impl Vm {
-    fn run(&mut self) -> anyhow::Result<Value> {
+    fn run(&mut self, chunk: &Chunk, args: Vec<Value>) -> anyhow::Result<Value> {
+        for arg in args{
+            self.push(arg);
+        }
         loop {
             if self.error_occurred {
                 return Err(anyhow!("Error occurred"));
             }
             debug!("{:?}", self.stack);
-            let opcode = self.chunk.code[self.ip];
+            let opcode = chunk.code[self.ip];
             self.ip += 1;
             match opcode {
                 OP_CONSTANT => {
-                    let value = &self.chunk.constants[self.chunk.code[self.ip] as usize];
-                    self.ip += 1;
+                    let value = &chunk.constants[self.read(chunk)];
                     self.push(value.clone());
                 }
                 OP_ADD => binary_op(self, |a, b| a + b),
@@ -97,38 +107,55 @@ impl Vm {
                     println!("{}", v);
                 }
                 OP_DEFINE => {
-                    let name = self.read_constant();
+                    let name = self.read_name(chunk);
                     let value = self.pop();
                     self.local_vars.insert(name, value);
                 }
-                OP_DEF_I32 => define_var!(self, I32),
-                OP_DEF_I64 => define_var!(self, I64),
-                OP_DEF_U32 => define_var!(self, U32),
-                OP_DEF_U64 => define_var!(self, U64),
-                OP_DEF_F32 => define_var!(self, F32),
-                OP_DEF_F64 => define_var!(self, F64),
-                OP_DEF_STRING => define_var!(self, String),
-                OP_DEF_CHAR => define_var!(self, Char),
-                OP_DEF_BOOL => define_var!(self, Bool),
-                OP_DEF_DATE => define_var!(self, Date),
-                OP_DEF_LIST => define_var!(self, List),
-                OP_DEF_MAP => define_var!(self, Map),
-                OP_DEF_STRUCT => define_var!(self, Struct),
+                OP_DEF_I32 => define_var!(self, I32, chunk),
+                OP_DEF_I64 => define_var!(self, I64, chunk),
+                OP_DEF_U32 => define_var!(self, U32, chunk),
+                OP_DEF_U64 => define_var!(self, U64, chunk),
+                OP_DEF_F32 => define_var!(self, F32, chunk),
+                OP_DEF_F64 => define_var!(self, F64, chunk),
+                OP_DEF_STRING => define_var!(self, String, chunk),
+                OP_DEF_CHAR => define_var!(self, Char, chunk),
+                OP_DEF_BOOL => define_var!(self, Bool, chunk),
+                OP_DEF_DATE => define_var!(self, Date, chunk),
+                OP_DEF_LIST => define_var!(self, List, chunk),
+                OP_DEF_MAP => define_var!(self, Map, chunk),
+                OP_DEF_STRUCT => define_var!(self, Struct, chunk),
                 OP_GET => {
-                    let name = self.read_constant();
+                    let name = self.read_name(chunk);
                     let value = self.local_vars.get(&name).unwrap();
                     self.push(value.clone()); // not happy
                     debug!("after get {:?}", self.stack);
+                }
+                OP_CALL => {
+                    let function_index = self.read(chunk);
+                    let function = chunk.functions.get(function_index).unwrap();
+                    let mut args = vec![];
+                    let num_args = self.read(chunk);
+                    for _ in 0..num_args {
+                        let arg = self.pop();
+                        args.push(arg);
+                    }
+                    args.reverse();
+                    let result = interpret_function(function, args)?;
+                    self.push(result);
                 }
                 _ => {}
             }
         }
     }
 
-    fn read_constant(&mut self) -> String {
-        let name = self.chunk.constants[self.chunk.code[self.ip] as usize].to_string();
+    fn read(&mut self, chunk: &Chunk) -> usize {
         self.ip += 1;
-        name
+        chunk.code[self.ip - 1] as usize
+    }
+
+    fn read_name(&mut self, chunk: &Chunk) -> String {
+        let index = self.read(chunk);
+        chunk.constants[index].to_string() //string??
     }
 
     fn reset_stack(&mut self) {
@@ -177,8 +204,8 @@ pub const OP_DIVIDE: u16 = 5;
 pub const OP_NEGATE: u16 = 6;
 pub const OP_PRINT: u16 = 7;
 pub const OP_RETURN: u16 = 8;
-// pub const OP_TRUE: u16 = 9;
-// pub const OP_FALSE: u16 = 10; // obsolete, vacant space
+pub const OP_CALL: u16 = 9;
+pub const OP_DEF_FN: u16 = 10;
 pub const OP_AND: u16 = 11;
 pub const OP_OR: u16 = 12;
 pub const OP_NOT: u16 = 13;
