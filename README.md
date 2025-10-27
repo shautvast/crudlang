@@ -43,14 +43,12 @@
 - struct, enum
 - date
 
-**question**
-
-- how to model headers
-- middleware, implement later
+## open questions
+- how to model http headers
+- pluggability for middleware?, implement later?
 - JWT tokens, I guess
 
-**the example in /src: **
-
+## the example in /src:
 - a very simple api that listens to GET /api/customers{:id} and returns a customer from the database
 
 ## Design
@@ -59,7 +57,7 @@
 * compiler first creates an AST and then compiles to bytecode (no file format yet)
 * uses a stack-based virtual machine
 
-## status:
+## Current status:
 * compiler and runtime are still limited but working
 * supports:
   * basic types:
