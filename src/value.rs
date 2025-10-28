@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter, write};
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
 
@@ -114,18 +114,6 @@ impl Into<Value> for DateTime<Utc> {
     }
 }
 
-impl Into<Value> for Vec<Value> {
-    fn into(self) -> Value {
-        Value::List(self)
-    }
-}
-
-impl Into<Value> for HashMap<Value, Value> {
-    fn into(self) -> Value {
-        Value::Map(self)
-    }
-}
-
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
@@ -167,26 +155,37 @@ impl Add<&Value> for &Value {
     type Output = anyhow::Result<Value>;
 
     fn add(self, rhs: &Value) -> Self::Output {
-        match (self, rhs) {
-            (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a + b)),
-            (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a + b)),
-            (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a + b)),
-            (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a + b)),
-            (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a + b)),
-            (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a + b)),
-            (Value::String(s), Value::I32(i)) => Ok(Value::String(format!("{}{}", s, i))),
-            (Value::String(s), Value::I64(i)) => Ok(Value::String(format!("{}{}", s, i))),
-            (Value::String(s), Value::U32(u)) => Ok(Value::String(format!("{}{}", s, u))),
-            (Value::String(s), Value::U64(u)) => Ok(Value::String(format!("{}{}", s, u))),
-            (Value::String(s), Value::F32(f)) => Ok(Value::String(format!("{}{}", s, f))),
-            (Value::String(s), Value::F64(f)) => Ok(Value::String(format!("{}{}", s, f))),
-            (Value::String(s), Value::Bool(b)) => Ok(Value::String(format!("{}{}", s, b))),
-            (Value::String(s), Value::Char(c)) => Ok(Value::String(format!("{}{}", s, c))),
-            (Value::String(s1), Value::String(s2)) => Ok(Value::String(format!("{}{}", s1, s2))),
-            (Value::String(s1), Value::List(l)) => Ok(Value::String(format!("{}{:?}", s1, l))),
-            (Value::String(s1), Value::Map(m)) => Ok(Value::String(format!("{}{:?}", s1, m))),
-            //enum?
-            _ => Err(anyhow!("Cannot add")),
+        if let Value::List(s) = self {
+            let mut copy = s.clone();
+            copy.push(rhs.clone());
+            Ok(Value::List(copy))
+        } else if let Value::List(rhs) = rhs {
+            let mut copy = rhs.clone();
+            copy.push(self.clone());
+            Ok(Value::List(copy))
+        } else {
+            match (self, rhs) {
+                (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a + b)),
+                (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a + b)),
+                (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a + b)),
+                (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a + b)),
+                (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a + b)),
+                (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a + b)),
+                (Value::String(s), Value::I32(i)) => Ok(Value::String(format!("{}{}", s, i))),
+                (Value::String(s), Value::I64(i)) => Ok(Value::String(format!("{}{}", s, i))),
+                (Value::String(s), Value::U32(u)) => Ok(Value::String(format!("{}{}", s, u))),
+                (Value::String(s), Value::U64(u)) => Ok(Value::String(format!("{}{}", s, u))),
+                (Value::String(s), Value::F32(f)) => Ok(Value::String(format!("{}{}", s, f))),
+                (Value::String(s), Value::F64(f)) => Ok(Value::String(format!("{}{}", s, f))),
+                (Value::String(s), Value::Bool(b)) => Ok(Value::String(format!("{}{}", s, b))),
+                (Value::String(s), Value::Char(c)) => Ok(Value::String(format!("{}{}", s, c))),
+                (Value::String(s1), Value::String(s2)) => {
+                    Ok(Value::String(format!("{}{}", s1, s2)))
+                }
+                (Value::String(s1), Value::Map(m)) => Ok(Value::String(format!("{}{:?}", s1, m))),
+                //enum?
+                _ => Err(anyhow!("Cannot add")),
+            }
         }
     }
 }
@@ -333,18 +332,18 @@ impl PartialEq for Value {
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Char(a), Value::Char(b)) => a == b,
             (Value::Date(a), Value::Date(b)) => a == b,
-            (Value::List(a), Value::List(b)) => a == b,
-            (Value::Map(a), Value::Map(b)) => {
-                let mut equal = true;
-                for (k, v) in a.iter() {
-                    if !b.contains_key(k) || b.get(k).unwrap() != v {
-                        //safe unwrap
-                        equal = false;
-                        break;
-                    }
-                }
-                equal
-            }
+            // (Value::List(a), Value::List(b)) => a == b,
+            // (Value::Map(a), Value::Map(b)) => {
+            //     let mut equal = true;
+            //     for (k, v) in a.iter() {
+            //         if !b.contains_key(k) || b.get(k).unwrap() != v {
+            //             //safe unwrap
+            //             equal = false;
+            //             break;
+            //         }
+            //     }
+            //     equal
+            // }
             // struct?
             _ => false, //?
         }

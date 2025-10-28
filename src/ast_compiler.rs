@@ -1,4 +1,4 @@
-use crate::tokens::TokenType::{Bang, Bool, Char, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightParen, SingleRightArrow, Slash, Star, True, U32, U64, StringType};
+use crate::tokens::TokenType::{Bang, Bool, Char, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, If, Indent, Integer, LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightParen, SingleRightArrow, Slash, Star, StringType, True, U32, U64, RightBracket};
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use log::debug;
@@ -282,7 +282,9 @@ impl AstCompiler {
 
     fn primary(&mut self) -> anyhow::Result<Expression> {
         debug!("primary {:?}", self.peek());
-        Ok(if self.match_token(vec![False]) {
+        Ok(if self.match_token(vec![LeftBracket]) {
+            self.list()?
+        } else if self.match_token(vec![False]) {
             Expression::Literal {
                 line: self.peek().line,
                 literaltype: Bool,
@@ -328,6 +330,22 @@ impl AstCompiler {
                 self.variable_lookup(&token)?
             }
         })
+    }
+
+    fn list(&mut self) -> anyhow::Result<Expression> {
+        let mut list = vec![];
+        while !self.match_token(vec![RightBracket]){
+            list.push(self.expression()?);
+            if self.peek().token_type == TokenType::Comma {
+                self.advance();
+            } else {
+                self.consume(RightBracket, "Expect ']' after list.")?;
+                break;
+            }
+        }
+        Ok(Expression::List {
+            values: list, literaltype: ListType, line: self.peek().line},
+        )
     }
 
     fn variable_lookup(&mut self, token: &Token) -> anyhow::Result<Expression> {
@@ -437,9 +455,11 @@ fn calculate_type(
     declared_type: Option<TokenType>,
     inferred_type: TokenType,
 ) -> anyhow::Result<TokenType> {
-    println!("declared type {:?} inferred type: {:?}", declared_type, inferred_type);
+    println!(
+        "declared type {:?} inferred type: {:?}",
+        declared_type, inferred_type
+    );
     Ok(if let Some(declared_type) = declared_type {
-
         if declared_type != inferred_type {
             match (declared_type, inferred_type) {
                 (I32, I64) => I32,
@@ -448,7 +468,7 @@ fn calculate_type(
                 (F64, I64) => F64,
                 (U64, I64) => U64,
                 (U64, I32) => U64,
-                (StringType, Text) => StringType,
+                (StringType, _) => StringType, // meh, this all needs rigorous testing
                 _ => {
                     return Err(anyhow::anyhow!(
                         "Incompatible types. Expected {}, found {}",
@@ -464,7 +484,6 @@ fn calculate_type(
         match inferred_type {
             Integer | I64 => I64,
             FloatingPoint => F64,
-            Text => Text,
             Bool => Bool,
             Date => Date,
             ListType => ListType,
@@ -532,6 +551,11 @@ pub enum Expression {
         literaltype: TokenType,
         value: Value,
     },
+    List {
+        line: usize,
+        literaltype: TokenType,
+        values: Vec<Expression>,
+    },
     Variable {
         line: usize,
         name: String,
@@ -550,8 +574,9 @@ impl Expression {
         match self {
             Self::Binary { line, .. } => *line,
             Self::Unary { line, .. } => *line,
-            Self::Grouping { line, expression } => *line,
+            Self::Grouping { line, .. } => *line,
             Self::Literal { line, .. } => *line,
+            Self::List { line, .. } => *line,
             Self::Variable { line, .. } => *line,
             Self::FunctionCall { line, .. } => *line,
         }
@@ -615,8 +640,9 @@ impl Expression {
                     }
                 }
             }
-            Self::Grouping { line, expression } => expression.infer_type(),
+            Self::Grouping { expression,.. } => expression.infer_type(),
             Self::Literal { literaltype, .. } => literaltype.clone(),
+            Self::List { literaltype, .. } => literaltype.clone(),
             Self::Unary { right, .. } => right.infer_type(),
             Self::Variable { var_type, .. } => var_type.clone(),
             Self::FunctionCall { return_type, .. } => return_type.clone(),

@@ -8,9 +8,10 @@ fn main() -> anyhow::Result<()> {
 
     let tokens = scan(
         r#"
-fn main(a: string) -> u32:
+fn main(a: list) -> list:
     a + 42
-let text = "hello "
+
+let text:list = ["hello "]
 main(text)"#,
     );
     println!("{:?}", tokens);

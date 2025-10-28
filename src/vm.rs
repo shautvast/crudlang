@@ -1,6 +1,7 @@
 use crate::chunk::Chunk;
 use crate::value::Value;
 use anyhow::anyhow;
+use bumpalo::Bump;
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -24,6 +25,7 @@ pub struct Vm {
     stack: Vec<Value>,
     local_vars: HashMap<String, Value>,
     error_occurred: bool,
+    arena: Bump,
 }
 
 pub fn interpret(chunk: &Chunk) -> anyhow::Result<Value> {
@@ -32,6 +34,7 @@ pub fn interpret(chunk: &Chunk) -> anyhow::Result<Value> {
         stack: vec![],
         local_vars: HashMap::new(),
         error_occurred: false,
+        arena: Bump::new(),
     };
     vm.run(chunk, vec![])
 }
@@ -42,13 +45,14 @@ pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> anyhow::Result<Val
         stack: vec![],
         local_vars: HashMap::new(),
         error_occurred: false,
+        arena: Bump::new(),
     };
     vm.run(chunk, args)
 }
 
 impl Vm {
     fn run(&mut self, chunk: &Chunk, args: Vec<Value>) -> anyhow::Result<Value> {
-        for arg in args{
+        for arg in args {
             self.push(arg);
         }
         loop {
@@ -121,7 +125,16 @@ impl Vm {
                 OP_DEF_CHAR => define_var!(self, Char, chunk),
                 OP_DEF_BOOL => define_var!(self, Bool, chunk),
                 OP_DEF_DATE => define_var!(self, Date, chunk),
-                OP_DEF_LIST => define_var!(self, List, chunk),
+                OP_DEF_LIST => {
+                    let name = self.read_name(chunk);
+                    let len = self.read(chunk);
+                    let mut list = vec![];
+                    for _ in 0..len {
+                        let value = self.pop();
+                        list.push(value);
+                    }
+                    self.local_vars.insert(name, Value::List(list));
+                }
                 OP_DEF_MAP => define_var!(self, Map, chunk),
                 OP_DEF_STRUCT => define_var!(self, Struct, chunk),
                 OP_GET => {
@@ -236,3 +249,4 @@ pub const OP_DEF_MAP: u16 = 37;
 pub const OP_DEF_STRUCT: u16 = 38;
 pub const OP_DEF_F32: u16 = 39;
 pub const OP_DEF_F64: u16 = 40;
+// pub const OP_NEW_LIST: u16 = 40;

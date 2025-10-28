@@ -1,13 +1,13 @@
-use crate::ast_compiler::{Expression, Function, Parameter, Statement};
+use crate::ast_compiler::{Expression, Function, Statement};
 use crate::chunk::Chunk;
 use crate::tokens::TokenType;
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_AND, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_CHAR,
-    OP_DEF_DATE, OP_DEF_F32, OP_DEF_F64, OP_DEF_FN, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST,
+    OP_DEF_DATE, OP_DEF_F32, OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST,
     OP_DEF_MAP, OP_DEF_STRING, OP_DEF_STRUCT, OP_DEFINE, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER,
-    OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT,
-    OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+    OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR,
+    OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
 use std::collections::HashMap;
 
@@ -17,7 +17,7 @@ pub fn compile(ast: &Vec<Statement>) -> anyhow::Result<Chunk> {
 
 pub(crate) fn compile_function(function: &Function) -> anyhow::Result<Chunk> {
     let mut compiler = Compiler::new(&function.name.lexeme);
-    for parm in &function.parameters{
+    for parm in &function.parameters {
         let name = parm.name.lexeme.clone();
         let name_index = compiler.chunk.add_constant(Value::String(name.clone()));
         compiler.vars.insert(name, name_index);
@@ -71,7 +71,10 @@ impl Compiler {
                 let name_index = self.chunk.add_constant(Value::String(name.lexeme.clone()));
                 self.vars.insert(name.lexeme.clone(), name_index);
                 self.compile_expression(initializer)?;
-                self.define_variable(var_type, name_index)?
+                self.define_variable(var_type, name_index)?;
+                if let Expression::List {values, .. } = initializer {
+                    self.emit_byte(values.len() as u16);
+                }
             }
             Statement::PrintStmt { value } => {
                 self.compile_expression(value)?;
@@ -84,8 +87,7 @@ impl Compiler {
                 let function_name = function.name.lexeme.clone();
                 let compiled_function = compile_function(function)?;
                 let name_index = self.chunk.add_function(compiled_function);
-                self.functions
-                    .insert(function_name, name_index);
+                self.functions.insert(function_name, name_index);
             }
         }
         Ok(())
@@ -108,6 +110,12 @@ impl Compiler {
                 self.emit_bytes(OP_GET, *name_index as u16);
             }
             Expression::Literal { value, .. } => self.emit_constant(value),
+            Expression::List { values, .. } => {
+                for expr in values {
+                    self.compile_expression(expr)?;
+                }
+                // self.emit_bytes(OP_NEW_LIST, values.len() as u16);
+            }
             Expression::Grouping { expression, .. } => self.compile_expression(expression)?,
             Expression::Unary {
                 operator, right, ..
