@@ -12,7 +12,7 @@ use crate::vm::{
 use std::collections::HashMap;
 
 pub fn compile(ast: &Vec<Statement>) -> anyhow::Result<Chunk> {
-    compile_name(ast, "_")
+    compile_name(ast, "/")
 }
 
 pub(crate) fn compile_function(function: &Function) -> anyhow::Result<Chunk> {
@@ -98,6 +98,7 @@ impl Compiler {
             Expression::FunctionCall {
                 name, arguments, ..
             } => {
+                println!("call {}",name);
                 let function_index = *self.functions.get(name).unwrap();
                 for argument in arguments {
                     self.compile_expression(argument)?;

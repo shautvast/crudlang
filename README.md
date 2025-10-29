@@ -1,9 +1,9 @@
 # crud-lang
 
 ## Why?
-1. Existing languages are great, but building web services is bolted on, instead of supported out-of-the-box.
+1. Existing languages are just fine, but building web services is bolted on, instead of supported out-of-the-box.
 2. Whereas every company needs an API these days. 
-3. I always have trouble mapping urls the code that handles them.
+3. Is it just me? -I always have trouble mapping urls the code that handles them.
 4. There is no language (AFAIK) that supports layering. (controllers, services, database access, etc). This pattern is ubiquitous (at least where I live). 
 5. ORM's are awful. Mapping from sql rows to objects is a pain. This should be easy.
 6. Json is ubiquitous. Convention over configuration: A controller returns json by default.
@@ -33,7 +33,7 @@
 
 ### An interpreter written in Rust. 
 OMG!
-And it has everything I like in other languages
+And I cherry picked things I like, mostly from rust and python. 
   - strictly typed
   - [] is a list
   - {} is a map
@@ -41,7 +41,7 @@ And it has everything I like in other languages
   - structs and duck typing
   - everything is an expression
   - nice iterators.
-  - First class functions? Maybe...
+  - First-class functions? Maybe...
   - automatic mapping from database to object to json
   - indenting like python
 
@@ -63,12 +63,11 @@ And it has everything I like in other languages
 - a very simple api that listens to GET /api/customers{:id} and returns a customer from the database
 
 ## Design
-* heavily inspired by Crafting Interpreters
-* language influences from rust and python
+* heavily inspired by Crafting Interpreters. 
 * compiler first creates an AST and then compiles to bytecode (no file format yet)
 * uses a stack-based virtual machine
 
-## Current status:
+## Current status: infancy
 * compiler and runtime are still limited but working
 * supports:
   * basic types:
@@ -90,6 +89,12 @@ And it has everything I like in other languages
 - object/struct types
 - control flow
 - tests
+
+## What about performance?
+* Clueless really! We'll see.
+* But it is written in rust
+* And it has no GC
+* So, maybe it will compete with python?
 
 ## A quick taste
 **variables**

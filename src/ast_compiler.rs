@@ -1,4 +1,9 @@
-use crate::tokens::TokenType::{Bang, Bool, Char, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, If, Indent, Integer, LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightParen, SingleRightArrow, Slash, Star, StringType, True, U32, U64, RightBracket};
+use crate::tokens::TokenType::{
+    Bang, Bool, Char, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater,
+    GreaterEqual, GreaterGreater, I32, I64, Identifier, If, Indent, Integer, LeftBracket,
+    LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print,
+    RightBracket, RightParen, SingleRightArrow, Slash, Star, StringType, True, U32, U64,
+};
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use log::debug;
@@ -6,7 +11,7 @@ use std::collections::HashMap;
 
 pub fn compile(tokens: Vec<Token>) -> anyhow::Result<Vec<Statement>> {
     let mut compiler = AstCompiler::new(tokens);
-    compiler.compile(0)
+    compiler.compile_tokens(0)
 }
 
 #[derive(Debug, Clone)]
@@ -38,17 +43,84 @@ impl AstCompiler {
         }
     }
 
-    fn compile(&mut self, expected_indent: usize) -> anyhow::Result<Vec<Statement>> {
-        let mut statements = vec![];
+    fn reset(&mut self) {
+        self.current = 0;
+    }
+
+    fn compile_tokens(&mut self, expected_indent: usize) -> anyhow::Result<Vec<Statement>> {
+        self.collect_functions()?;
+        self.reset();
+        self.compile(expected_indent)
+    }
+
+    fn compile(&mut self, expected_indent: usize) -> anyhow::Result<Vec<Statement>>{
+        if !self.had_error {
+            let mut statements = vec![];
+            while !self.is_at_end() {
+                let statement = self.indent(expected_indent)?;
+                if let Some(statement) = statement {
+                    statements.push(statement);
+                } else {
+                    break;
+                }
+            }
+            Ok(statements)
+        } else {
+            Err(anyhow::anyhow!("Compilation failed."))
+        }
+    }
+
+    fn collect_functions(&mut self) -> anyhow::Result<()> {
         while !self.is_at_end() {
-            let statement = self.indent(expected_indent)?;
-            if let Some(statement) = statement {
-                statements.push(statement);
+            if self.match_token(vec![Fn]) {
+                let name_token = self.consume(Identifier, "Expect function name.")?;
+                self.consume(LeftParen, "Expect '(' after function name.")?;
+                let mut parameters = vec![];
+                while !self.check(RightParen) {
+                    if parameters.len() >= 25 {
+                        return Err(anyhow::anyhow!("Too many parameters."));
+                    }
+                    let parm_name = self.consume(Identifier, "Expect parameter name.")?;
+
+                    self.consume(Colon, "Expect : after parameter name")?;
+                    let var_type = self.peek().token_type;
+                    self.vars.push(Expression::Variable {
+                        name: parm_name.lexeme.to_string(),
+                        var_type,
+                        line: parm_name.line,
+                    });
+                    self.advance();
+                    parameters.push(Parameter {
+                        name: parm_name,
+                        var_type,
+                    });
+                    if self.peek().token_type == TokenType::Comma {
+                        self.advance();
+                    }
+                }
+                self.consume(RightParen, "Expect ')' after parameters.")?;
+                let return_type = if self.check(SingleRightArrow) {
+                    self.consume(SingleRightArrow, "")?;
+                    self.advance().token_type
+                } else {
+                    TokenType::Void
+                };
+                self.consume(Colon, "Expect colon (:) after function declaration.")?;
+                self.consume(Eol, "Expect end of line.")?;
+
+                let function = Function {
+                    name: name_token.clone(),
+                    parameters,
+                    return_type,
+                    body: vec![],
+                };
+
+                self.functions.insert(name_token.lexeme, function);
             } else {
-                break;
+                self.advance();
             }
         }
-        Ok(statements)
+        Ok(())
     }
 
     fn indent(&mut self, expected_indent: usize) -> anyhow::Result<Option<Statement>> {
@@ -89,50 +161,25 @@ impl AstCompiler {
     fn function_declaration(&mut self) -> anyhow::Result<Statement> {
         let name_token = self.consume(Identifier, "Expect function name.")?;
         self.consume(LeftParen, "Expect '(' after function name.")?;
-        let mut parameters = vec![];
         while !self.check(RightParen) {
-            if parameters.len() >= 25 {
-                return Err(anyhow::anyhow!("Too many parameters."));
-            }
-            let parm_name = self.consume(Identifier, "Expect parameter name.")?;
-
-            self.consume(Colon, "Expect : after parameter name")?;
-            let var_type = self.peek().token_type;
-            self.vars.push(Expression::Variable {
-                name: parm_name.lexeme.to_string(),
-                var_type,
-                line: parm_name.line,
-            });
             self.advance();
-            parameters.push(Parameter {
-                name: parm_name,
-                var_type,
-            });
         }
+
         self.consume(RightParen, "Expect ')' after parameters.")?;
-        let return_type = if self.check(SingleRightArrow) {
-            self.consume(SingleRightArrow, "")?;
-            self.advance().token_type
-        } else {
-            TokenType::Void
-        };
-        self.consume(Colon, "Expect colon (:) after function declaration.")?;
+        while !self.check(Colon) {
+            self.advance();
+        }
+        self.consume(Colon, "2Expect colon (:) after function declaration.")?;
         self.consume(Eol, "Expect end of line.")?;
 
         let current_indent = self.indent.last().unwrap();
         let body = self.compile(current_indent + 1)?;
 
-        let function = Function {
-            name: name_token.clone(),
-            parameters,
-            return_type,
-            body,
-        };
+        self.functions.get_mut(&name_token.lexeme).unwrap().body = body;
 
         let function_stmt = Statement::FunctionStmt {
-            function: function.clone(),
+            function: self.functions.get(&name_token.lexeme).unwrap().clone(),
         };
-        self.functions.insert(name_token.lexeme, function.clone());
         Ok(function_stmt)
     }
 
@@ -334,7 +381,7 @@ impl AstCompiler {
 
     fn list(&mut self) -> anyhow::Result<Expression> {
         let mut list = vec![];
-        while !self.match_token(vec![RightBracket]){
+        while !self.match_token(vec![RightBracket]) {
             list.push(self.expression()?);
             if self.peek().token_type == TokenType::Comma {
                 self.advance();
@@ -344,8 +391,10 @@ impl AstCompiler {
             }
         }
         Ok(Expression::List {
-            values: list, literaltype: ListType, line: self.peek().line},
-        )
+            values: list,
+            literaltype: ListType,
+            line: self.peek().line,
+        })
     }
 
     fn variable_lookup(&mut self, token: &Token) -> anyhow::Result<Expression> {
@@ -369,6 +418,7 @@ impl AstCompiler {
     }
 
     fn function_call(&mut self, name: String) -> anyhow::Result<Expression> {
+        println!("function call {}", name);
         let function_name = self.functions.get(&name).unwrap().name.lexeme.clone();
         let function = self.functions.get(&function_name).unwrap().clone();
 
@@ -408,7 +458,11 @@ impl AstCompiler {
             self.advance();
         } else {
             self.had_error = true;
-            return Err(anyhow::anyhow!(message.to_string()));
+            return Err(anyhow::anyhow!(
+                "{} at {:?}",
+                message.to_string(),
+                self.peek()
+            ));
         }
         Ok(self.previous().clone())
     }
@@ -640,7 +694,7 @@ impl Expression {
                     }
                 }
             }
-            Self::Grouping { expression,.. } => expression.infer_type(),
+            Self::Grouping { expression, .. } => expression.infer_type(),
             Self::Literal { literaltype, .. } => literaltype.clone(),
             Self::List { literaltype, .. } => literaltype.clone(),
             Self::Unary { right, .. } => right.infer_type(),

@@ -1,0 +1,5 @@
+fn get() -> string:
+    add("hello", "world")
+
+fn add(a: string, b: string) -> string:
+    a + b

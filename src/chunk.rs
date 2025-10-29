@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_F32,
@@ -6,12 +7,14 @@ use crate::vm::{
     OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
 
+#[derive(Debug, Clone)]
 pub struct Chunk {
     name: String,
     pub code: Vec<u16>,
     pub constants: Vec<Value>,
     lines: Vec<usize>,
-    pub(crate) functions: Vec<Chunk>,
+    pub functions: HashMap<String, Chunk>,
+    pub(crate) functions_by_index: Vec<Chunk>,
 }
 
 impl Chunk {
@@ -21,7 +24,8 @@ impl Chunk {
             code: Vec::new(),
             constants: vec![],
             lines: vec![],
-            functions: Vec::new(),
+            functions: HashMap::new(),
+            functions_by_index: Vec::new(),
         }
     }
 
@@ -36,12 +40,13 @@ impl Chunk {
     }
 
     pub fn add_function(&mut self, function: Chunk) -> usize {
-        self.functions.push(function);
+        self.functions_by_index.push(function.clone());
+        self.functions.insert(function.name.to_string(), function);
         self.functions.len() - 1
     }
 
     pub fn disassemble(&self) {
-        for f in &self.functions {
+        for f in self.functions.values() {
             f.disassemble();
         }
         println!("== {} ==", self.name);

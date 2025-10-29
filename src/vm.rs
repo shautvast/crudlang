@@ -28,7 +28,7 @@ pub struct Vm {
     arena: Bump,
 }
 
-pub fn interpret(chunk: &Chunk) -> anyhow::Result<Value> {
+pub async fn interpret(chunk: &Chunk) -> anyhow::Result<Value> {
     let mut vm = Vm {
         ip: 0,
         stack: vec![],
@@ -145,7 +145,7 @@ impl Vm {
                 }
                 OP_CALL => {
                     let function_index = self.read(chunk);
-                    let function = chunk.functions.get(function_index).unwrap();
+                    let function = chunk.functions_by_index.get(function_index).unwrap();
                     let mut args = vec![];
                     let num_args = self.read(chunk);
                     for _ in 0..num_args {

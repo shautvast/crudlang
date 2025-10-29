@@ -21,3 +21,4 @@ anyhow = "1.0"
 tower-livereload = "0.9.6"
 log = "0.4.28"
 bumpalo = { version = "3.19", features = ["collections", "boxed", "serde"] }
+walkdir = "2.5.0"
