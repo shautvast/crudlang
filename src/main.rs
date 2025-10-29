@@ -64,16 +64,32 @@ async fn handle_get(State(state): State<Arc<AppState>>) -> Result<Json<String>, 
     Ok(Json(interpret(&state.code).await.unwrap().to_string()))
 }
 
-// let tokens = scan("");
 //
-// match ast_compiler::compile(tokens) {
-//     Ok(statements) => {
-//         println!("{:?}", statements);
-//         let chunk = compile(&statements)?;
-//         chunk.disassemble();
-//         println!("{}",interpret(&chunk)?);
-//     }
-//     Err(e) => {
-//         println!("{}", e)
-//     }
-// }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_compile() -> anyhow::Result<()> {
+        let tokens = scan(
+            r#"
+fn hello(name: string) -> string:
+    "Hello "+name
+hello("sander")"#,
+        );
+
+        match ast_compiler::compile(tokens) {
+            Ok(statements) => {
+                println!("{:?}", statements);
+                let chunk = compile(&statements)?;
+                chunk.disassemble();
+                println!("{}", interpret(&chunk).await?);
+            }
+            Err(e) => {
+                println!("{}", e)
+            }
+        }
+        Ok(())
+    }
+}

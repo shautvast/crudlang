@@ -144,8 +144,9 @@ impl Vm {
                     debug!("after get {:?}", self.stack);
                 }
                 OP_CALL => {
-                    let function_index = self.read(chunk);
-                    let function = chunk.functions_by_index.get(function_index).unwrap();
+                    let function_name_index = self.read(chunk);
+                    let function_name = chunk.constants[function_name_index].to_string();
+                    let function = chunk.functions.get(&function_name).unwrap();
                     let mut args = vec![];
                     let num_args = self.read(chunk);
                     for _ in 0..num_args {

@@ -14,7 +14,7 @@ pub struct Chunk {
     pub constants: Vec<Value>,
     lines: Vec<usize>,
     pub functions: HashMap<String, Chunk>,
-    pub(crate) functions_by_index: Vec<Chunk>,
+    // pub(crate) functions_by_index: Vec<Chunk>,
 }
 
 impl Chunk {
@@ -25,7 +25,7 @@ impl Chunk {
             constants: vec![],
             lines: vec![],
             functions: HashMap::new(),
-            functions_by_index: Vec::new(),
+            // functions_by_index: Vec::new(),
         }
     }
 
@@ -39,10 +39,9 @@ impl Chunk {
         self.constants.len() - 1
     }
 
-    pub fn add_function(&mut self, function: Chunk) -> usize {
-        self.functions_by_index.push(function.clone());
+    pub fn add_function(&mut self, function: Chunk) {
+        // self.functions_by_index.push(function.clone());
         self.functions.insert(function.name.to_string(), function);
-        self.functions.len() - 1
     }
 
     pub fn disassemble(&self) {
@@ -103,29 +102,29 @@ impl Chunk {
         }
     }
 
-    fn simple_inst(&self, name: &str, offset: usize) -> usize {
-        println!("{}", name);
+    fn simple_inst(&self, op: &str, offset: usize) -> usize {
+        println!("{}", op);
         offset + 1
     }
 
-    fn call_inst(&self, name: &str, offset: usize) -> usize {
+    fn call_inst(&self, op: &str, offset: usize) -> usize {
         let constant = self.code[offset + 1];
         let num_args = self.code[offset + 2];
-        println!("{} {}({}):", name, constant, num_args);
+        println!("{} {}:{}({}):", op, constant, &self.constants[constant as usize], num_args);
         offset + 3
     }
 
-    fn new_inst(&self, name: &str, offset: usize) -> usize {
+    fn new_inst(&self, op: &str, offset: usize) -> usize {
         let constant = self.code[offset + 1];
         let len = self.code[offset + 2];
-        print!("{} len: {}:", name, len);
+        print!("{} len: {}:", op, len);
         self.print_value(&self.constants[constant as usize]);
         offset + 3
     }
 
-    fn constant_inst(&self, name: &str, offset: usize) -> usize {
+    fn constant_inst(&self, op: &str, offset: usize) -> usize {
         let constant = self.code[offset + 1];
-        print!("{} {}:", name, constant);
+        print!("{} {}:", op, constant);
         self.print_value(&self.constants[constant as usize]);
         offset + 2
     }

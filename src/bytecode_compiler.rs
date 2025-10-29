@@ -85,9 +85,10 @@ impl Compiler {
             }
             Statement::FunctionStmt { function } => {
                 let function_name = function.name.lexeme.clone();
-                let compiled_function = compile_function(function)?;
-                let name_index = self.chunk.add_function(compiled_function);
+                let name_index = self.chunk.add_constant(Value::String(function_name.clone()));
                 self.functions.insert(function_name, name_index);
+                let compiled_function = compile_function(function)?;
+                self.chunk.add_function(compiled_function);
             }
         }
         Ok(())
@@ -99,11 +100,11 @@ impl Compiler {
                 name, arguments, ..
             } => {
                 println!("call {}",name);
-                let function_index = *self.functions.get(name).unwrap();
+                let name_index = *self.functions.get(name).unwrap();
                 for argument in arguments {
                     self.compile_expression(argument)?;
                 }
-                self.emit_bytes(OP_CALL, function_index as u16);
+                self.emit_bytes(OP_CALL, name_index as u16);
                 self.emit_byte(arguments.len() as u16);
             }
             Expression::Variable { name, .. } => {
