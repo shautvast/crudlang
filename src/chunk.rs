@@ -1,20 +1,30 @@
-use std::collections::HashMap;
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_F32,
     OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_STRING, OP_DEFINE, OP_DIVIDE, OP_EQUAL,
-    OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE,
-    OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+    OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT,
+    OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
-    name: String,
+    pub(crate) name: String,
     pub code: Vec<u16>,
     pub constants: Vec<Value>,
     lines: Vec<usize>,
-    pub functions: HashMap<String, Chunk>,
-    // pub(crate) functions_by_index: Vec<Chunk>,
+}
+
+impl Chunk {
+    pub(crate) fn find_constant(&self, p0: &String) -> Option<usize> {
+        for (i, constant) in self.constants.iter().enumerate() {
+            if let Value::String(s) = constant {
+                if s == p0 {
+                    return Some(i);
+                }
+            }
+        }
+        None
+    }
 }
 
 impl Chunk {
@@ -24,8 +34,6 @@ impl Chunk {
             code: Vec::new(),
             constants: vec![],
             lines: vec![],
-            functions: HashMap::new(),
-            // functions_by_index: Vec::new(),
         }
     }
 
@@ -39,15 +47,7 @@ impl Chunk {
         self.constants.len() - 1
     }
 
-    pub fn add_function(&mut self, function: Chunk) {
-        // self.functions_by_index.push(function.clone());
-        self.functions.insert(function.name.to_string(), function);
-    }
-
     pub fn disassemble(&self) {
-        for f in self.functions.values() {
-            f.disassemble();
-        }
         println!("== {} ==", self.name);
         let mut offset = 0;
         while offset < self.code.len() {
@@ -110,7 +110,10 @@ impl Chunk {
     fn call_inst(&self, op: &str, offset: usize) -> usize {
         let constant = self.code[offset + 1];
         let num_args = self.code[offset + 2];
-        println!("{} {}:{}({}):", op, constant, &self.constants[constant as usize], num_args);
+        println!(
+            "{} {}:{}({}):",
+            op, constant, &self.constants[constant as usize], num_args
+        );
         offset + 3
     }
 

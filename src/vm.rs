@@ -20,23 +20,24 @@ macro_rules! define_var {
     }};
 }
 
-pub struct Vm {
+pub struct Vm<'a> {
     ip: usize,
     stack: Vec<Value>,
     local_vars: HashMap<String, Value>,
     error_occurred: bool,
-    arena: Bump,
+    registry: &'a HashMap<String, Chunk>,
 }
 
-pub async fn interpret(chunk: &Chunk) -> anyhow::Result<Value> {
+pub async fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> anyhow::Result<Value> {
+    let chunk = registry.get(function).unwrap().clone();
     let mut vm = Vm {
         ip: 0,
         stack: vec![],
         local_vars: HashMap::new(),
         error_occurred: false,
-        arena: Bump::new(),
+        registry,
     };
-    vm.run(chunk, vec![])
+    vm.run(&chunk, vec![])
 }
 
 pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> anyhow::Result<Value> {
@@ -45,12 +46,12 @@ pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> anyhow::Result<Val
         stack: vec![],
         local_vars: HashMap::new(),
         error_occurred: false,
-        arena: Bump::new(),
+        registry: &HashMap::new(),
     };
     vm.run(chunk, args)
 }
 
-impl Vm {
+impl <'a> Vm<'a> {
     fn run(&mut self, chunk: &Chunk, args: Vec<Value>) -> anyhow::Result<Value> {
         for arg in args {
             self.push(arg);
@@ -145,16 +146,18 @@ impl Vm {
                 }
                 OP_CALL => {
                     let function_name_index = self.read(chunk);
-                    let function_name = chunk.constants[function_name_index].to_string();
-                    let function = chunk.functions.get(&function_name).unwrap();
-                    let mut args = vec![];
                     let num_args = self.read(chunk);
+
+                    let mut args = vec![];
                     for _ in 0..num_args {
                         let arg = self.pop();
                         args.push(arg);
                     }
-                    args.reverse();
-                    let result = interpret_function(function, args)?;
+                    // args.reverse();
+
+                    let function_name = chunk.constants[function_name_index].to_string();
+                    let function_chunk = self.registry.get(&function_name).unwrap();
+                    let result = interpret_function(function_chunk, args)?;
                     self.push(result);
                 }
                 _ => {}

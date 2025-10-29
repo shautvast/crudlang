@@ -96,6 +96,19 @@ impl Into<Value> for &str {
         Value::String(self.to_string())
     }
 }
+
+impl From<String> for Value {
+    fn from(s: String) -> Self {
+        Value::String(s.clone())
+    }
+}
+
+impl From<&String> for Value {
+    fn from(s: &String) -> Self {
+        Value::String(s.clone())
+    }
+}
+
 impl Into<Value> for char {
     fn into(self) -> Value {
         Value::Char(self)
@@ -171,8 +184,8 @@ impl Add<&Value> for &Value {
                 (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a + b)),
                 (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a + b)),
                 (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a + b)),
-                (Value::String(s), Value::I32(i)) => Ok(Value::String(format!("{}{}", s, i))),
-                (Value::String(s), Value::I64(i)) => Ok(Value::String(format!("{}{}", s, i))),
+                (Value::String(s), Value::I32(i)) => Ok(format!("{}{}", s, i).into()),
+                (Value::String(s), Value::I64(i)) => Ok(format!("{}{}", s, i).into()),
                 (Value::String(s), Value::U32(u)) => Ok(Value::String(format!("{}{}", s, u))),
                 (Value::String(s), Value::U64(u)) => Ok(Value::String(format!("{}{}", s, u))),
                 (Value::String(s), Value::F32(f)) => Ok(Value::String(format!("{}{}", s, f))),

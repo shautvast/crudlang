@@ -9,6 +9,7 @@ use crudlang::scanner::scan;
 use crudlang::vm::interpret;
 use std::collections::HashMap;
 use std::fs;
+use std::hash::Hash;
 use std::sync::Arc;
 use walkdir::WalkDir;
 
@@ -17,6 +18,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let mut paths = HashMap::new();
+    let mut registry = HashMap::new();
     for entry in WalkDir::new("source").into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
         if path.is_file() && path.ends_with("web.crud") {
@@ -25,10 +27,13 @@ async fn main() -> anyhow::Result<()> {
             let tokens = scan(&source);
             match ast_compiler::compile(tokens) {
                 Ok(statements) => {
-                    let chunk = compile(&statements)?;
-                    let path = path.strip_prefix("source")?.to_str().unwrap();
-                    let path = path.replace("/web.crud", "");
-                    paths.insert(format!("/{}", path), chunk);
+                    let path = path
+                        .strip_prefix("source")?
+                        .to_str()
+                        .unwrap()
+                        .replace(".crud", "");
+                    let chunk = compile(&path, &statements, &mut registry)?;
+                    paths.insert(path, chunk);
                 }
                 Err(e) => {
                     println!("{}", e);
@@ -38,16 +43,18 @@ async fn main() -> anyhow::Result<()> {
             println!();
         }
     }
+
+    let registry = Arc::new(registry);
     if !paths.is_empty() {
         let mut app = Router::new();
         for (path, code) in paths.iter() {
-            let code = code.functions.get("get").unwrap();
-            let state = Arc::new(AppState { code: code.clone() });
+            let state = Arc::new(AppState {
+                name: format!("{}.get", path),
+                registry: registry.clone(),
+            });
             println!("adding {}", path);
-            app = app.route(path, get(handle_get).with_state(state.clone()));
-            // .with_state(state);
+            app = app.route(&format!("/{}",path.replace("/web", "")), get(handle_get).with_state(state.clone()));
         }
-        // run our app with hyper, listening globally on port 3000
         let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
         println!("listening on {}", listener.local_addr()?);
         axum::serve(listener, app).await?;
@@ -57,11 +64,17 @@ async fn main() -> anyhow::Result<()> {
 
 #[derive(Clone)]
 struct AppState {
-    code: Chunk,
+    name: String,
+    registry: Arc<HashMap<String, Chunk>>,
 }
 
 async fn handle_get(State(state): State<Arc<AppState>>) -> Result<Json<String>, StatusCode> {
-    Ok(Json(interpret(&state.code).await.unwrap().to_string()))
+    Ok(Json(
+        interpret(&state.registry, &state.name)
+            .await
+            .unwrap()
+            .to_string(),
+    ))
 }
 
 //
@@ -78,18 +91,19 @@ fn hello(name: string) -> string:
     "Hello "+name
 hello("sander")"#,
         );
-
+        let mut registry = HashMap::new();
         match ast_compiler::compile(tokens) {
             Ok(statements) => {
                 println!("{:?}", statements);
-                let chunk = compile(&statements)?;
+                let chunk = compile("", &statements, &mut registry)?;
                 chunk.disassemble();
-                println!("{}", interpret(&chunk).await?);
+                // println!("{}", interpret(&chunk).await?);
             }
             Err(e) => {
                 println!("{}", e)
             }
         }
+        println!("{:?}", registry);
         Ok(())
     }
 }
