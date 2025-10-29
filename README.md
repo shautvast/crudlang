@@ -17,18 +17,15 @@
   - ease of use for CRUD operations, like automatic mapping from sql rows to json
 - a simple, yet powerful language
 - urls are made up of directories and filenames
-- a controller sourcefile is a file with the .ctl extension
+- a controller sourcefile is a file named web.crud
 - likewise:
-    - .svc services
-    - .cl service clients (that call other services)
-    - .dao database access code (not objects)
-    - .qc queueconsumers
-    - .qp queueproducers
-    - .utl utilities
-- there is a strict calling hierarchy. A service can not call a controller. It can only go 'down'.
-- Services can not call other services, because that is the recipe for spaghetti. Refactor your logic, abstract and put lower level code in utilities.
-- Utilities are allowed to call other utilities. OMG, spaghetti after all! TBD
-- Automatic memory management using an arena per call
+    - service.crud for services
+    - db.crud database access code 
+    - util.crud utilities
+- it is not mandatory to have services. You can put all your logic in a controller.
+- there is a strict calling hierarchy. A service cannot call a controller. It can only go 'down'.
+- and it can only access functions in its own subtree. Generic code should be put higher up in the tree.
+- Therefore, services cannot call other services, because that is the recipe for spaghetti. Refactor your logic, abstract and put lower level code in utilities.
 - openapi support
 
 ### An interpreter written in Rust. 
@@ -59,8 +56,12 @@ And I cherry picked things I like, mostly from rust and python.
 - pluggability for middleware?, implement later?
 - JWT tokens, I guess
 
-## the example in /src:
-- a very simple api that listens to GET /api/customers{:id} and returns a customer from the database
+## the example in /source:
+- a very simple api that returns "hello world"
+  - but it demonstrates the basic concepts
+- it starts an axum server
+- go to http://localhost:3000/hello
+- goal: it listens to GET /api/customers{:id} and returns a customer from the database
 
 ## Design
 * heavily inspired by Crafting Interpreters. 
