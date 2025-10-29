@@ -15,15 +15,13 @@
   - built-in types for dates and uuid for example
   - collection literals
   - ease of use for CRUD operations, like automatic mapping from sql rows to json
-- a simple, yet powerful language
-- urls are made up of directories and filenames
+- urls are made up of directories. 
 - a controller sourcefile is a file named web.crud
 - likewise:
     - service.crud for services
     - db.crud database access code 
     - util.crud utilities
-- it is not mandatory to have services. You can put all your logic in a controller.
-- there is a strict calling hierarchy. A service cannot call a controller. It can only go 'down'.
+- it is not mandatory to have services. If you want, you can put all your logic in a controller.
 - and it can only access functions in its own subtree. Generic code should be put higher up in the tree.
 - Therefore, services cannot call other services, because that is the recipe for spaghetti. Refactor your logic, abstract and put lower level code in utilities.
 - openapi support
