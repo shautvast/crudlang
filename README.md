@@ -142,9 +142,19 @@ fn add(a:i64, b:i64) -> i64:
 * There are no semicolons. End-of-line chars serve as delimiters.
 * Having multiple expressions on one line is not allowed.
 * indenting determines a block and therefore the scope.
-
+* The return type declaration is optional. If not specified, it is void.
 
 **function calling**
 ```
 let sum = add(1,2)
 ```
+
+**An actual controller**
+```
+fn get() -> string:
+    add("hello", "world")
+
+fn add(a: string, b: string) -> string:
+    a + " " + b
+```
+* get() is the entry point for http GET method calls, likewise for POST, PUT, DELETE, etc.
