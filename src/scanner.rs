@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use crate::tokens::TokenType::{BitXor, FloatingPoint, Integer};
 use crate::{
     keywords,
@@ -7,7 +8,7 @@ use crate::{
     },
 };
 
-pub fn scan(source: &str) -> Vec<Token> {
+pub fn scan(source: &str) -> anyhow::Result<Vec<Token>> {
     let scanner = Scanner {
         chars: source.chars().collect(),
         current: 0,
@@ -20,17 +21,17 @@ pub fn scan(source: &str) -> Vec<Token> {
 }
 
 impl Scanner {
-    fn scan(mut self) -> Vec<Token> {
+    fn scan(mut self) -> anyhow::Result<Vec<Token>> {
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_token();
+            self.scan_token()?;
         }
         self.add_token(TokenType::Eol);
         self.add_token(TokenType::Eof);
-        self.tokens
+        Ok(self.tokens)
     }
 
-    fn scan_token(&mut self) {
+    fn scan_token(&mut self) -> anyhow::Result<()>{
         let c = self.advance();
         if self.new_line && (c == ' ' || c == '\t') {
             self.add_token(TokenType::Indent);
@@ -106,7 +107,8 @@ impl Scanner {
                         self.add_token(TokenType::Slash);
                     }
                 }
-                '"' => self.string(),
+                '\'' => self.char()?,
+                '"' => self.string()?,
                 '\r' | '\t' | ' ' => {}
                 '\n' => {
                     self.line += 1;
@@ -136,11 +138,12 @@ impl Scanner {
                     } else if is_alpha(c) {
                         self.identifier();
                     } else {
-                        println!("Unexpected identifier at line {}", self.line);
+                        return Err(anyhow!("Unexpected identifier at line {}", self.line));
                     }
                 }
             }
         }
+        Ok(())
     }
 
     fn identifier(&mut self) {
@@ -154,7 +157,7 @@ impl Scanner {
     }
 
     fn number(&mut self) {
-        while is_digit(self.peek()) {
+        while is_digit(self.peek() ) {
             self.advance();
         }
         let mut has_dot = false;
@@ -163,14 +166,35 @@ impl Scanner {
             self.advance();
         }
 
-        while is_digit(self.peek()) {
+        while is_digit_or_scientific(self.peek()) {
             self.advance();
         }
         let value: String = self.chars[self.start..self.current].iter().collect();
         self.add_token_with_value(if has_dot { FloatingPoint } else { Integer }, value);
     }
 
-    fn string(&mut self) {
+    fn char(&mut self) -> anyhow::Result<()>{
+        while self.peek() != '\'' && !self.is_at_end() {
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            return Err(anyhow!("Unterminated char at {}", self.line))
+        }
+
+        self.advance();
+
+        let value: String = self.chars[self.start + 1..self.current - 1]
+            .iter()
+            .collect();
+        if value.len() != 1 {
+            return Err(anyhow!("Illegal char length for {} at line {}", value, self.line))
+        }
+        self.add_token_with_value(TokenType::Char, value);
+        Ok(())
+    }
+
+    fn string(&mut self) -> anyhow::Result<()>{
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -179,7 +203,7 @@ impl Scanner {
         }
 
         if self.is_at_end() {
-            println!("Unterminated string at {}", self.line)
+            return Err(anyhow!("Unterminated string at {}", self.line))
         }
 
         self.advance();
@@ -188,6 +212,7 @@ impl Scanner {
             .iter()
             .collect();
         self.add_token_with_value(TokenType::StringType, value);
+        Ok(())
     }
 
     fn peek(&self) -> char {
@@ -242,6 +267,10 @@ struct Scanner {
 
 fn is_digit(c: char) -> bool {
     c >= '0' && c <= '9'
+}
+
+fn is_digit_or_scientific(c: char) -> bool {
+    is_digit(c) || c=='e' || c=='E'
 }
 
 fn is_alphanumeric(c: char) -> bool {

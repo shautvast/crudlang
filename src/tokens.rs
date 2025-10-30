@@ -17,11 +17,6 @@ impl Token {
     }
 }
 
-#[derive(Debug)]
-enum Value {
-    None,
-}
-
 #[derive(Debug, PartialEq, Clone, Copy, Hash)]
 pub enum TokenType {
     Bang,
@@ -55,7 +50,9 @@ pub enum TokenType {
     Identifier,
     If,
     Indent,
-    Integer, //undetermined integer type
+    Integer,
+    SignedInteger,
+    UnsignedInteger,
     LeftBrace,
     LeftBracket,
     LeftParen,
@@ -69,7 +66,7 @@ pub enum TokenType {
     LogicalOr,
     Minus,
     Not,
-    FloatingPoint, //undetermined float type
+    FloatingPoint,
     Object,
     Plus,
     Print,
@@ -157,6 +154,8 @@ impl fmt::Display for TokenType {
             TokenType::True => write!(f, "true"),
             TokenType::Void => write!(f, "()"),
             TokenType::While => write!(f, "while"),
+            TokenType::SignedInteger => write!(f, "i32/64"),
+            TokenType::UnsignedInteger => write!(f, "u32/64"),
         }
     }
 }

@@ -1,7 +1,6 @@
 use crate::chunk::Chunk;
 use crate::value::Value;
 use anyhow::anyhow;
-use bumpalo::Bump;
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -173,10 +172,6 @@ impl <'a> Vm<'a> {
     fn read_name(&mut self, chunk: &Chunk) -> String {
         let index = self.read(chunk);
         chunk.constants[index].to_string() //string??
-    }
-
-    fn reset_stack(&mut self) {
-        self.stack.clear();
     }
 
     fn push(&mut self, value: Value) {

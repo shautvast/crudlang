@@ -9,7 +9,6 @@ use crate::vm::{
     OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT,
     OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
-use anyhow::anyhow;
 use std::collections::HashMap;
 
 pub fn compile(
@@ -47,7 +46,7 @@ pub(crate) fn compile_name(
 
 struct Compiler {
     chunk: Chunk,
-    had_error: bool,
+    _had_error: bool,
     current_line: usize,
     vars: HashMap<String, usize>,
 }
@@ -56,7 +55,7 @@ impl Compiler {
     fn new(name: &str) -> Self {
         Self {
             chunk: Chunk::new(name),
-            had_error: false,
+            _had_error: false,
             current_line: 0,
             vars: HashMap::new(),
         }
@@ -142,7 +141,6 @@ impl Compiler {
                 } else {
                     name.clone()
                 };
-                println!("call {}", name);
                 let name_index = self
                     .chunk
                     .find_constant(&name)

@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
         if path.is_file() && path.ends_with("web.crud") {
             print!("compiling {:?}: ", path);
             let source = fs::read_to_string(path)?;
-            let tokens = scan(&source);
+            let tokens = scan(&source)?;
             match ast_compiler::compile(tokens) {
                 Ok(statements) => {
                     let path = path
@@ -53,7 +53,10 @@ async fn main() -> anyhow::Result<()> {
                 registry: registry.clone(),
             });
             println!("adding {}", path);
-            app = app.route(&format!("/{}",path.replace("/web", "")), get(handle_get).with_state(state.clone()));
+            app = app.route(
+                &format!("/{}", path.replace("/web", "")),
+                get(handle_get).with_state(state.clone()),
+            );
         }
         let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
         println!("listening on {}", listener.local_addr()?);
@@ -77,33 +80,3 @@ async fn handle_get(State(state): State<Arc<AppState>>) -> Result<Json<String>, 
     ))
 }
 
-//
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_compile() -> anyhow::Result<()> {
-        let tokens = scan(
-            r#"
-fn hello(name: string) -> string:
-    "Hello "+name
-hello("sander")"#,
-        );
-        let mut registry = HashMap::new();
-        match ast_compiler::compile(tokens) {
-            Ok(statements) => {
-                println!("{:?}", statements);
-                let chunk = compile("", &statements, &mut registry)?;
-                chunk.disassemble();
-                // println!("{}", interpret(&chunk).await?);
-            }
-            Err(e) => {
-                println!("{}", e)
-            }
-        }
-        println!("{:?}", registry);
-        Ok(())
-    }
-}

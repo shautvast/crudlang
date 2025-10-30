@@ -100,9 +100,9 @@ And I cherry picked things I like, mostly from rust and python.
 ```
 let a = 42
 ```
-* declares a variable of type i64
+* declares a variable of type i64 (signed 64 bit integer)
 
-or explictly as u32
+or explictly as u32 (unsigned 32 bit integer)
 ```
 let a:u32 = 42
 ```

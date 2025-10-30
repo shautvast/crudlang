@@ -143,7 +143,7 @@ impl Display for Value {
             &Value::Enum => write!(f, "enum"),
             &Value::Struct(v) => write!(f, "{}", v),
             &Value::List(v) => write!(f, "{:?}", v),
-            &Value::Map(v) => write!(f, "map"),
+            &Value::Map(_) => write!(f, "map"),
             &Value::Error(v) => write!(f, "{}", v),
             &Value::Void => write!(f, "()"),
         }
@@ -295,7 +295,7 @@ impl Not for &Value {
     type Output = anyhow::Result<Value>;
 
     fn not(self) -> Self::Output {
-        match (self) {
+        match self {
             Value::Bool(b) => Ok(Value::Bool(!b)),
             Value::I32(i32) => Ok(Value::I32(!i32)),
             Value::I64(i64) => Ok(Value::I64(!i64)),

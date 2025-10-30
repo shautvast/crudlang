@@ -1,11 +1,7 @@
-use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater,
-    GreaterEqual, GreaterGreater, I32, I64, Identifier, If, Indent, Integer, LeftBracket,
-    LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print,
-    RightBracket, RightParen, SingleRightArrow, Slash, Star, StringType, True, U32, U64,
-};
+use crate::tokens::TokenType::{Bang, Bool, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, If, Indent, Integer, LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star, StringType, True, U32, U64, UnsignedInteger, Char};
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
+use anyhow::anyhow;
 use log::debug;
 use std::collections::HashMap;
 
@@ -15,7 +11,7 @@ pub fn compile(tokens: Vec<Token>) -> anyhow::Result<Vec<Statement>> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Function {
+pub struct Function {
     pub(crate) name: Token,
     pub(crate) parameters: Vec<Parameter>,
     pub(crate) return_type: TokenType,
@@ -53,7 +49,7 @@ impl AstCompiler {
         self.compile(expected_indent)
     }
 
-    fn compile(&mut self, expected_indent: usize) -> anyhow::Result<Vec<Statement>>{
+    fn compile(&mut self, expected_indent: usize) -> anyhow::Result<Vec<Statement>> {
         if !self.had_error {
             let mut statements = vec![];
             while !self.is_at_end() {
@@ -201,11 +197,13 @@ impl AstCompiler {
             let var_type = match calculate_type(declared_type, inferred_type) {
                 Ok(var_type) => var_type,
                 Err(e) => {
-                    println!("error at line {}", name_token.line);
                     self.had_error = true;
-                    return Err(e);
+                    return Err(anyhow!("error at line {}: {}", name_token.line, e));
                 }
             };
+            // match var_type{
+            //     U32 => U32()
+            // }
             self.vars.push(Expression::Variable {
                 name: name_token.lexeme.to_string(),
                 var_type,
@@ -246,7 +244,7 @@ impl AstCompiler {
     }
 
     fn or(&mut self) -> anyhow::Result<Expression> {
-        let mut expr = self.and()?;
+        let expr = self.and()?;
         self.binary(vec![TokenType::LogicalOr], expr)
     }
 
@@ -281,7 +279,7 @@ impl AstCompiler {
     }
 
     fn bitshift(&mut self) -> anyhow::Result<Expression> {
-        let mut expr = self.term()?;
+        let expr = self.term()?;
         self.binary(vec![GreaterGreater, LessLess], expr)
     }
 
@@ -361,6 +359,12 @@ impl AstCompiler {
                 literaltype: StringType,
                 value: Value::String(self.previous().lexeme.to_string()),
             }
+        } else if self.match_token(vec![Char]) {
+            Expression::Literal {
+                line: self.peek().line,
+                literaltype: Char,
+                value: Value::Char(self.previous().lexeme.chars().next().unwrap()),
+            }
         } else if self.match_token(vec![LeftParen]) {
             let expr = self.expression()?;
             self.consume(RightParen, "Expect ')' after expression.")?;
@@ -418,7 +422,6 @@ impl AstCompiler {
     }
 
     fn function_call(&mut self, name: String) -> anyhow::Result<Expression> {
-        println!("function call {}", name);
         let function_name = self.functions.get(&name).unwrap().name.lexeme.clone();
         let function = self.functions.get(&function_name).unwrap().clone();
 
@@ -509,20 +512,20 @@ fn calculate_type(
     declared_type: Option<TokenType>,
     inferred_type: TokenType,
 ) -> anyhow::Result<TokenType> {
-    println!(
-        "declared type {:?} inferred type: {:?}",
-        declared_type, inferred_type
-    );
     Ok(if let Some(declared_type) = declared_type {
         if declared_type != inferred_type {
             match (declared_type, inferred_type) {
-                (I32, I64) => I32,
+                (I32, I64) => I32, //need this?
+                (I32, Integer) => I32,
                 (U32, U64) => U32,
+                (U32, Integer) => U32,
                 (F32, F64) => F32,
+                (F32, FloatingPoint) => F32,
                 (F64, I64) => F64,
+                (F64, FloatingPoint) => F64,
                 (U64, I64) => U64,
                 (U64, I32) => U64,
-                (StringType, _) => StringType, // meh, this all needs rigorous testing
+                (StringType, _) => StringType, // meh, this all needs rigorous testing. Update: this is in progress
                 _ => {
                     return Err(anyhow::anyhow!(
                         "Incompatible types. Expected {}, found {}",
@@ -697,7 +700,16 @@ impl Expression {
             Self::Grouping { expression, .. } => expression.infer_type(),
             Self::Literal { literaltype, .. } => literaltype.clone(),
             Self::List { literaltype, .. } => literaltype.clone(),
-            Self::Unary { right, .. } => right.infer_type(),
+            Self::Unary {
+                right, operator, ..
+            } => {
+                let literal_type = right.infer_type();
+                if literal_type == Integer && operator.token_type == Minus {
+                    SignedInteger
+                } else {
+                    UnsignedInteger
+                }
+            }
             Self::Variable { var_type, .. } => var_type.clone(),
             Self::FunctionCall { return_type, .. } => return_type.clone(),
         }
