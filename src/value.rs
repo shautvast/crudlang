@@ -7,32 +7,9 @@ use std::hash::{Hash, Hasher};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
 
 #[derive(Debug, Clone)]
-pub struct StructDefinition {
-    fields: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct StructValue {
-    definition: StructDefinition,
+pub struct Object {
+    definition: String,
     fields: Vec<Value>,
-}
-
-impl StructValue {
-    pub fn new(definition: StructDefinition) -> Self {
-        Self {
-            definition,
-            fields: Vec::new(),
-        }
-    }
-}
-
-impl Display for StructValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for (i, field) in self.definition.fields.iter().enumerate() {
-            write!(f, "{}: {}", field, self.fields[i])?;
-        }
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -50,7 +27,7 @@ pub enum Value {
     Enum,
     List(Vec<Value>),
     Map(HashMap<Value, Value>),
-    Struct(StructValue),
+    ObjectType(Box<Object>),
     Error(String),
     Void,
 }
@@ -141,13 +118,28 @@ impl Display for Value {
             &Value::Char(v) => write!(f, "{}", v),
             &Value::Date(v) => write!(f, "{}", v),
             &Value::Enum => write!(f, "enum"),
-            &Value::Struct(v) => write!(f, "{}", v),
+            &Value::ObjectType(o) => write!(f, "{}: {:?}", o.definition, o.fields),
             &Value::List(v) => write!(f, "{:?}", v),
-            &Value::Map(_) => write!(f, "map"),
+            &Value::Map(map) => to_string(f, map),
             &Value::Error(v) => write!(f, "{}", v),
             &Value::Void => write!(f, "()"),
         }
     }
+}
+
+fn to_string(f: &mut Formatter, map: &HashMap<Value, Value>) -> std::fmt::Result {
+    f.write_str("{")?;
+    let mut first = true;
+    for (k, v) in map {
+        if !first {
+            f.write_str(", ")?;
+        }
+        f.write_str(&k.to_string())?;
+        f.write_str(": ")?;
+        f.write_str(&v.to_string())?;
+        first = false;
+    }
+    f.write_str("}")
 }
 
 impl Neg for &Value {

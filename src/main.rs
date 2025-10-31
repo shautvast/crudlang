@@ -6,7 +6,7 @@ use crudlang::ast_compiler;
 use crudlang::bytecode_compiler::compile;
 use crudlang::chunk::Chunk;
 use crudlang::scanner::scan;
-use crudlang::vm::interpret;
+use crudlang::vm::{interpret, interpret_async};
 use std::collections::HashMap;
 use std::fs;
 use std::hash::Hash;
@@ -32,7 +32,7 @@ async fn main() -> anyhow::Result<()> {
                         .to_str()
                         .unwrap()
                         .replace(".crud", "");
-                    let chunk = compile(&path, &statements, &mut registry)?;
+                    let chunk = compile(Some(&path), &statements, &mut registry)?;
                     paths.insert(path, chunk);
                 }
                 Err(e) => {
@@ -73,7 +73,7 @@ struct AppState {
 
 async fn handle_get(State(state): State<Arc<AppState>>) -> Result<Json<String>, StatusCode> {
     Ok(Json(
-        interpret(&state.registry, &state.name)
+        interpret_async(&state.registry, &state.name)
             .await
             .unwrap()
             .to_string(),

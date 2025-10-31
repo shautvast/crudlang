@@ -27,7 +27,23 @@ pub struct Vm<'a> {
     registry: &'a HashMap<String, Chunk>,
 }
 
-pub async fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> anyhow::Result<Value> {
+pub fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> anyhow::Result<Value> {
+    let chunk = registry.get(function).unwrap().clone();
+    // for (key,value) in registry.iter() {
+    //     println!("{}", key);
+    //     value.disassemble();
+    // }
+    let mut vm = Vm {
+        ip: 0,
+        stack: vec![],
+        local_vars: HashMap::new(),
+        error_occurred: false,
+        registry,
+    };
+    vm.run(&chunk, vec![])
+}
+
+pub async fn interpret_async(registry: &HashMap<String, Chunk>, function: &str) -> anyhow::Result<Value> {
     let chunk = registry.get(function).unwrap().clone();
     let mut vm = Vm {
         ip: 0,
@@ -135,11 +151,20 @@ impl <'a> Vm<'a> {
                     }
                     self.local_vars.insert(name, Value::List(list));
                 }
-                OP_DEF_MAP => define_var!(self, Map, chunk),
-                OP_DEF_STRUCT => define_var!(self, Struct, chunk),
+                OP_DEF_MAP => {
+                    let name = self.read_name(chunk);
+                    let len = self.read(chunk);
+                    let mut map = HashMap::new();
+                    for _ in 0..len {
+                        let value = self.pop();
+                        let key = self.pop();
+                        map.insert(key,value);
+                    }
+                    self.local_vars.insert(name, Value::Map(map));
+                }
                 OP_GET => {
                     let name = self.read_name(chunk);
-                    let value = self.local_vars.get(&name).unwrap();
+                    let value = self.local_vars.get(&name). unwrap();
                     self.push(value.clone()); // not happy
                     debug!("after get {:?}", self.stack);
                 }

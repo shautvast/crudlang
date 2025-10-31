@@ -79,7 +79,6 @@ pub enum TokenType {
     Slash,
     Star,
     StringType,
-    Struct,
     True,
     U32,
     U64,
@@ -150,7 +149,6 @@ impl fmt::Display for TokenType {
             TokenType::SingleRightArrow => write!(f, "->"),
             TokenType::Slash => write!(f, "/"),
             TokenType::Star => write!(f, "*"),
-            TokenType::Struct => write!(f, "struct"),
             TokenType::True => write!(f, "true"),
             TokenType::Void => write!(f, "()"),
             TokenType::While => write!(f, "while"),
@@ -161,3 +159,23 @@ impl fmt::Display for TokenType {
 }
 
 impl Eq for TokenType {}
+
+impl TokenType {
+    pub(crate) fn is_type(&self) -> bool {
+        match self {
+            TokenType::I32
+            | TokenType::I64
+            | TokenType::U32
+            | TokenType::U64
+            | TokenType::F32
+            | TokenType::F64
+            | TokenType::StringType
+            | TokenType::Date
+            | TokenType::Object
+            | TokenType::ListType
+            | TokenType::MapType
+            | TokenType::Char => true,
+            _ => false,
+        }
+    }
+}

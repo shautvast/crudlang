@@ -21,7 +21,6 @@ pub(crate) fn get_keyword(lexeme: &str) -> Option<TokenType> {
         "or" => Some(TokenType::LogicalOr),
         "object" => Some(TokenType::Object),
         "print" => Some(TokenType::Print),
-        "struct" => Some(TokenType::Struct),
         "string" => Some(TokenType::StringType),
         "true" => Some(TokenType::True),
         "u32" => Some(TokenType::U32),

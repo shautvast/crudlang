@@ -1,9 +1,11 @@
+use std::collections::HashMap;
+use crate::ast_compiler::Parameter;
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_F32,
     OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_STRING, OP_DEFINE, OP_DIVIDE, OP_EQUAL,
     OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT,
-    OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+    OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT, OP_DEF_MAP,
 };
 
 #[derive(Debug, Clone)]
@@ -12,6 +14,7 @@ pub struct Chunk {
     pub code: Vec<u16>,
     pub constants: Vec<Value>,
     lines: Vec<usize>,
+    object_defs: HashMap<String, Vec<Parameter>>
 }
 
 impl Chunk {
@@ -28,23 +31,28 @@ impl Chunk {
 }
 
 impl Chunk {
-    pub fn new(name: &str) -> Chunk {
+    pub(crate) fn new(name: &str) -> Chunk {
         Chunk {
             name: name.to_string(),
             code: Vec::new(),
             constants: vec![],
             lines: vec![],
+            object_defs: HashMap::new(),
         }
     }
 
-    pub fn add(&mut self, byte: u16, line: usize) {
+    pub(crate) fn add(&mut self, byte: u16, line: usize) {
         self.code.push(byte);
         self.lines.push(line);
     }
 
-    pub fn add_constant(&mut self, value: impl Into<Value>) -> usize {
+    pub(crate) fn add_constant(&mut self, value: impl Into<Value>) -> usize {
         self.constants.push(value.into());
         self.constants.len() - 1
+    }
+
+    pub (crate) fn add_object_def(&mut self, name: &str, fields: &[Parameter]){
+        self.object_defs.insert(name.to_string(), fields.to_vec());
     }
 
     pub fn disassemble(&self) {
@@ -95,6 +103,7 @@ impl Chunk {
             OP_CALL => self.call_inst("CALL", offset),
             OP_GET => self.constant_inst("GET", offset),
             OP_DEF_LIST => self.new_inst("DEFLIST", offset),
+            OP_DEF_MAP => self.new_inst("DEFMAP", offset),
             _ => {
                 println!("Unknown instruction {}", instruction);
                 offset + 1

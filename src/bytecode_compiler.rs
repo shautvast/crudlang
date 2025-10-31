@@ -12,10 +12,10 @@ use crate::vm::{
 use std::collections::HashMap;
 
 pub fn compile(
-    namespace: &str,
+    namespace: Option<&str>,
     ast: &Vec<Statement>,
     registry: &mut HashMap<String, Chunk>,
-) -> anyhow::Result<Chunk> {
+) -> anyhow::Result<()> {
     compile_name(ast, namespace, registry)
 }
 
@@ -37,11 +37,19 @@ pub(crate) fn compile_function(
 
 pub(crate) fn compile_name(
     ast: &Vec<Statement>,
-    namespace: &str,
+    namespace: Option<&str>,
     registry: &mut HashMap<String, Chunk>,
-) -> anyhow::Result<Chunk> {
-    let compiler = Compiler::new(namespace);
-    Ok(compiler.compile(ast, registry, namespace)?)
+) -> anyhow::Result<()> {
+    let name=namespace.unwrap_or("main");
+    let compiler = Compiler::new(name);
+    let chunk = compiler.compile(ast, registry, name)?;
+    let qname = if let Some(namespace) = namespace{
+        format!("{}.{}", namespace, "main")
+    } else {
+        "main".to_string()
+    };
+    registry.insert(qname, chunk);
+    Ok(())
 }
 
 struct Compiler {
@@ -67,6 +75,7 @@ impl Compiler {
         registry: &mut HashMap<String, Chunk>,
         namespace: &str,
     ) -> anyhow::Result<Chunk> {
+        //TODO can likely be removed
         for statement in ast {
             if let Statement::FunctionStmt { function } = statement {
                 self.emit_constant(Value::String(format!(
@@ -101,10 +110,7 @@ impl Compiler {
                 let name_index = self.chunk.add_constant(Value::String(name.lexeme.clone()));
                 self.vars.insert(name.lexeme.clone(), name_index);
                 self.compile_expression(namespace, initializer, registry)?;
-                self.define_variable(var_type, name_index)?;
-                if let Expression::List { values, .. } = initializer {
-                    self.emit_byte(values.len() as u16);
-                }
+                self.define_variable(var_type, name_index, &initializer)?;
             }
             Statement::PrintStmt { value } => {
                 self.compile_expression(namespace, value, registry)?;
@@ -122,6 +128,9 @@ impl Compiler {
                     compiled_function,
                 );
             }
+            Statement::ObjectStmt { name, fields } => {
+                self.chunk.add_object_def(&name.lexeme, fields);
+            }
         }
         Ok(())
     }
@@ -136,15 +145,11 @@ impl Compiler {
             Expression::FunctionCall {
                 name, arguments, ..
             } => {
-                let name = if let None = self.chunk.find_constant(&name) {
-                    format!("{}.{}", namespace, name)
-                } else {
-                    name.clone()
-                };
+                let qname=format!("{}.{}", namespace, name);
                 let name_index = self
                     .chunk
-                    .find_constant(&name)
-                    .unwrap_or_else(|| self.emit_constant(name.into()) as usize);
+                    .find_constant(&qname)
+                    .unwrap_or_else(|| self.emit_constant(qname.into()) as usize);
 
                 for argument in arguments {
                     self.compile_expression(namespace, argument, registry)?;
@@ -163,7 +168,12 @@ impl Compiler {
                 for expr in values {
                     self.compile_expression(namespace, expr, registry)?;
                 }
-                // self.emit_bytes(OP_NEW_LIST, values.len() as u16);
+            }
+            Expression::Map { entries, .. } => {
+                for (key, value) in entries {
+                    self.compile_expression(namespace, key, registry)?;
+                    self.compile_expression(namespace, value, registry)?;
+                }
             }
             Expression::Grouping { expression, .. } => {
                 self.compile_expression(namespace, expression, registry)?
@@ -214,7 +224,12 @@ impl Compiler {
         Ok(())
     }
 
-    fn define_variable(&mut self, var_type: &TokenType, name_index: usize) -> anyhow::Result<()> {
+    fn define_variable(
+        &mut self,
+        var_type: &TokenType,
+        name_index: usize,
+        initializer: &Expression,
+    ) -> anyhow::Result<()> {
         let def_op = match var_type {
             TokenType::I32 => OP_DEF_I32,
             TokenType::I64 => OP_DEF_I64,
@@ -233,6 +248,15 @@ impl Compiler {
         };
 
         self.emit_bytes(def_op, name_index as u16);
+        match initializer {
+            Expression::List { values, .. } => {
+                self.emit_byte(values.len() as u16);
+            }
+            Expression::Map { entries, .. } => {
+                self.emit_byte(entries.len() as u16);
+            }
+            _ => {}
+        }
         Ok(())
     }
 

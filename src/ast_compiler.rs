@@ -1,4 +1,10 @@
-use crate::tokens::TokenType::{Bang, Bool, Colon, Date, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, If, Indent, Integer, LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star, StringType, True, U32, U64, UnsignedInteger, Char};
+use crate::tokens::TokenType::{
+    Bang, Bool, Char, Colon, Date, Eof, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater,
+    GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace, LeftBracket,
+    LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print,
+    RightBrace, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star, StringType,
+    True, U32, U64, UnsignedInteger,
+};
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use anyhow::anyhow;
@@ -7,7 +13,7 @@ use std::collections::HashMap;
 
 pub fn compile(tokens: Vec<Token>) -> anyhow::Result<Vec<Statement>> {
     let mut compiler = AstCompiler::new(tokens);
-    compiler.compile_tokens(0)
+    compiler.compile_tokens()
 }
 
 #[derive(Debug, Clone)]
@@ -34,7 +40,7 @@ impl AstCompiler {
             current: 0,
             had_error: false,
             vars: vec![],
-            indent: vec![],
+            indent: vec![0],
             functions: HashMap::new(),
         }
     }
@@ -43,17 +49,17 @@ impl AstCompiler {
         self.current = 0;
     }
 
-    fn compile_tokens(&mut self, expected_indent: usize) -> anyhow::Result<Vec<Statement>> {
+    fn compile_tokens(&mut self) -> anyhow::Result<Vec<Statement>> {
         self.collect_functions()?;
         self.reset();
-        self.compile(expected_indent)
+        self.compile()
     }
 
-    fn compile(&mut self, expected_indent: usize) -> anyhow::Result<Vec<Statement>> {
+    fn compile(&mut self) -> anyhow::Result<Vec<Statement>> {
         if !self.had_error {
             let mut statements = vec![];
             while !self.is_at_end() {
-                let statement = self.indent(expected_indent)?;
+                let statement = self.indent()?;
                 if let Some(statement) = statement {
                     statements.push(statement);
                 } else {
@@ -119,7 +125,8 @@ impl AstCompiler {
         Ok(())
     }
 
-    fn indent(&mut self, expected_indent: usize) -> anyhow::Result<Option<Statement>> {
+    fn indent(&mut self) -> anyhow::Result<Option<Statement>> {
+        let expected_indent = *self.indent.last().unwrap();
         // skip empty lines
         while self.check(Eol) {
             self.advance();
@@ -132,14 +139,13 @@ impl AstCompiler {
         }
         if indent_on_line > expected_indent {
             panic!(
-                "unexpected indent level {} vs {}",
+                "unexpected indent level {} vs expected {}",
                 indent_on_line, expected_indent
             );
         } else if indent_on_line < expected_indent {
             self.indent.pop();
             return Ok(None);
         } else {
-            self.indent.push(indent_on_line);
             Ok(Some(self.declaration()?))
         }
     }
@@ -149,9 +155,51 @@ impl AstCompiler {
             self.function_declaration()
         } else if self.match_token(vec![Let]) {
             self.let_declaration()
+        } else if self.match_token(vec![Object]) {
+            self.object_declaration()
         } else {
             self.statement()
         }
+    }
+
+    fn object_declaration(&mut self) -> anyhow::Result<Statement> {
+        let type_name = self.consume(Identifier, "Expect object name.")?;
+        self.consume(Colon, "Expect ':' after object name.")?;
+        self.consume(Eol, "Expect end of line.")?;
+
+        let mut fields = vec![];
+
+        let expected_indent = self.indent.last().unwrap() + 1;
+        // self.indent.push(expected_indent);
+        let mut done = false;
+        while !done && !self.match_token(vec![Eof]) {
+            for _ in 0..expected_indent {
+                if self.peek().token_type == Indent {
+                    self.advance();
+                } else {
+                    done = true;
+                }
+            }
+            if !done {
+                let field_name = self.consume(Identifier, "Expect an object field name.")?;
+                self.consume(Colon, "Expect ':' after field name.")?;
+                let field_type = self.peek().token_type;
+                if field_type.is_type() {
+                    self.advance();
+                } else {
+                    Err(anyhow::anyhow!("Expected a type"))?
+                }
+                fields.push(Parameter {
+                    name: field_name,
+                    var_type: field_type,
+                });
+            }
+        }
+        self.consume(Eol, "Expect end of line.")?;
+        Ok(Statement::ObjectStmt {
+            name: type_name,
+            fields,
+        })
     }
 
     fn function_declaration(&mut self) -> anyhow::Result<Statement> {
@@ -169,7 +217,8 @@ impl AstCompiler {
         self.consume(Eol, "Expect end of line.")?;
 
         let current_indent = self.indent.last().unwrap();
-        let body = self.compile(current_indent + 1)?;
+        self.indent.push(current_indent + 1);
+        let body = self.compile()?;
 
         self.functions.get_mut(&name_token.lexeme).unwrap().body = body;
 
@@ -201,9 +250,6 @@ impl AstCompiler {
                     return Err(anyhow!("error at line {}: {}", name_token.line, e));
                 }
             };
-            // match var_type{
-            //     U32 => U32()
-            // }
             self.vars.push(Expression::Variable {
                 name: name_token.lexeme.to_string(),
                 var_type,
@@ -329,6 +375,8 @@ impl AstCompiler {
         debug!("primary {:?}", self.peek());
         Ok(if self.match_token(vec![LeftBracket]) {
             self.list()?
+        } else if self.match_token(vec![LeftBrace]) {
+            self.map()?
         } else if self.match_token(vec![False]) {
             Expression::Literal {
                 line: self.peek().line,
@@ -397,6 +445,27 @@ impl AstCompiler {
         Ok(Expression::List {
             values: list,
             literaltype: ListType,
+            line: self.peek().line,
+        })
+    }
+
+    fn map(&mut self) -> anyhow::Result<Expression> {
+        let mut entries = vec![];
+        while !self.match_token(vec![RightBrace]) {
+            let key = self.expression()?;
+            self.consume(Colon, "Expect ':' after map key.")?;
+            let value = self.expression()?;
+            entries.push((key, value));
+            if self.peek().token_type == TokenType::Comma {
+                self.advance();
+            } else {
+                self.consume(RightBrace, "Expect '}' after map.")?;
+                break;
+            }
+        }
+        Ok(Expression::Map {
+            entries,
+            literaltype: MapType,
             line: self.peek().line,
         })
     }
@@ -504,7 +573,7 @@ impl AstCompiler {
     }
 
     fn is_at_end(&self) -> bool {
-        self.peek().token_type == TokenType::Eof
+        self.peek().token_type == Eof
     }
 }
 
@@ -567,6 +636,10 @@ pub enum Statement {
     FunctionStmt {
         function: Function,
     },
+    ObjectStmt {
+        name: Token,
+        fields: Vec<Parameter>,
+    },
 }
 
 impl Statement {
@@ -576,6 +649,7 @@ impl Statement {
             Statement::VarStmt { name, .. } => name.line,
             Statement::PrintStmt { value } => value.line(),
             Statement::FunctionStmt { function, .. } => function.name.line,
+            Statement::ObjectStmt { name, .. } => name.line,
         }
     }
 }
@@ -613,6 +687,11 @@ pub enum Expression {
         literaltype: TokenType,
         values: Vec<Expression>,
     },
+    Map {
+        line: usize,
+        literaltype: TokenType,
+        entries: Vec<(Expression, Expression)>,
+    },
     Variable {
         line: usize,
         name: String,
@@ -634,6 +713,7 @@ impl Expression {
             Self::Grouping { line, .. } => *line,
             Self::Literal { line, .. } => *line,
             Self::List { line, .. } => *line,
+            Self::Map { line, .. } => *line,
             Self::Variable { line, .. } => *line,
             Self::FunctionCall { line, .. } => *line,
         }
@@ -700,6 +780,7 @@ impl Expression {
             Self::Grouping { expression, .. } => expression.infer_type(),
             Self::Literal { literaltype, .. } => literaltype.clone(),
             Self::List { literaltype, .. } => literaltype.clone(),
+            Self::Map { literaltype, .. } => literaltype.clone(),
             Self::Unary {
                 right, operator, ..
             } => {

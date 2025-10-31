@@ -2,6 +2,8 @@
 mod tests {
     use crate::compile;
     use crate::scanner::scan;
+    use crate::value::Value;
+    use crate::vm::interpret;
 
     #[test]
     fn literal_int() {
@@ -81,14 +83,54 @@ mod tests {
 
     #[test]
     fn call_fn_with_args_returns_value() {
-        assert!(
-            compile(
-                r#"
-fn hello(name: string) -> string:
+        let r = compile(
+            r#"
+fn add_hello(name: string) -> string:
     "Hello " + name
-hello("world")"#
-            )
-            .is_ok()
+add_hello("world")"#,
         );
+        assert!(r.is_ok());
+        let result = interpret(&r.unwrap(), "main").unwrap();
+        assert_eq!(result, Value::String("Hello world".to_string()));
+    }
+
+    #[test]
+    fn object_definition() {
+        let r = compile(
+            r#"
+object Person:
+   name: string"#,
+        );
+        assert!(r.is_ok());
+    }
+
+    //     #[test]
+    //     fn object_() {
+    //         let r = compile(r#"
+    // object Person:
+    //    name: string
+    //
+    // let p = Person{name: "Sander"}
+    // print p
+    // "#, );
+    //         println!("{:?}", r);
+    //         assert!(r.is_ok());
+    //     }
+
+    #[test]
+    fn let_map() {
+        let r = compile(r#"{"name": "Dent", "age": 40 }"#);
+        assert!(r.is_ok());
+        let result = interpret(&r.unwrap(), "main").unwrap();
+        if let Value::Map(map) = result {
+            assert_eq!(
+                map.get(&Value::String("name".to_string())).unwrap(),
+                &Value::String("Dent".to_string())
+            );
+            assert_eq!(
+                map.get(&Value::String("age".to_string())).unwrap(),
+                &Value::I32(40)
+            );
+        }
     }
 }

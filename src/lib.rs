@@ -11,10 +11,10 @@ mod tokens;
 mod value;
 pub mod vm;
 
-pub fn compile(src: &str) -> anyhow::Result<chunk::Chunk> {
+pub fn compile(src: &str) -> anyhow::Result<HashMap<String, chunk::Chunk>> {
     let tokens = scan(src)?;
     let mut registry = HashMap::new();
     let ast= ast_compiler::compile(tokens)?;
-    let bytecode = bytecode_compiler::compile("", &ast, &mut registry)?;
-    Ok(bytecode)
+    bytecode_compiler::compile(None, &ast, &mut registry)?;
+    Ok(registry)
 }
