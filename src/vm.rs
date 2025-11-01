@@ -66,7 +66,7 @@ pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, Runt
     vm.run(chunk, args)
 }
 
-impl <'a> Vm<'a> {
+impl<'a> Vm<'a> {
     fn run(&mut self, chunk: &Chunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
         for arg in args {
             self.push(arg);
@@ -131,11 +131,47 @@ impl <'a> Vm<'a> {
                     let value = self.pop();
                     self.local_vars.insert(name, value);
                 }
-                OP_DEF_I32 => define_var!(self, I32, chunk),
+                OP_DEF_I32 => {
+                    let name = self.read_name(chunk);
+                    let value = self.pop();
+                    let value = match value{
+                        Value::I32(v) => Value::I32(v),
+                        Value::I64(v) => Value::I32(v as i32),
+                        _ => unreachable!(),
+                    };
+                    self.local_vars.insert(name, value);
+                }
                 OP_DEF_I64 => define_var!(self, I64, chunk),
-                OP_DEF_U32 => define_var!(self, U32, chunk),
-                OP_DEF_U64 => define_var!(self, U64, chunk),
-                OP_DEF_F32 => define_var!(self, F32, chunk),
+                OP_DEF_U32 => {
+                    let name = self.read_name(chunk);
+                    let value = self.pop();
+                    let value = match value{
+                        Value::U32(v) => Value::U32(v),
+                        Value::I64(v) => Value::U32(v as u32),
+                        _ => unreachable!(),
+                    };
+                    self.local_vars.insert(name, value);
+                }
+                OP_DEF_U64 => {
+                    let name = self.read_name(chunk);
+                    let value = self.pop();
+                    let value = match value{
+                        Value::U64(v) => Value::U64(v),
+                        Value::I64(v) => Value::U64(v as u64),
+                        _ => unreachable!(),
+                    };
+                    self.local_vars.insert(name, value);
+                }
+                OP_DEF_F32 => {
+                    let name = self.read_name(chunk);
+                    let value = self.pop();
+                    let value = match value{
+                        Value::F32(v) => Value::F32(v),
+                        Value::F64(v) => Value::F32(v as f32),
+                        _ => unreachable!(),
+                    };
+                    self.local_vars.insert(name, value);
+                }
                 OP_DEF_F64 => define_var!(self, F64, chunk),
                 OP_DEF_STRING => define_var!(self, String, chunk),
                 OP_DEF_CHAR => define_var!(self, Char, chunk),
@@ -158,13 +194,13 @@ impl <'a> Vm<'a> {
                     for _ in 0..len {
                         let value = self.pop();
                         let key = self.pop();
-                        map.insert(key,value);
+                        map.insert(key, value);
                     }
                     self.local_vars.insert(name, Value::Map(map));
                 }
                 OP_GET => {
                     let name = self.read_name(chunk);
-                    let value = self.local_vars.get(&name). unwrap();
+                    let value = self.local_vars.get(&name).unwrap();
                     self.push(value.clone()); // not happy
                     debug!("after get {:?}", self.stack);
                 }
@@ -210,7 +246,7 @@ impl <'a> Vm<'a> {
     }
 }
 
-fn binary_op(vm: &mut Vm, op: impl Fn(&Value, &Value) -> Result<Value, ValueError>  + Copy) {
+fn binary_op(vm: &mut Vm, op: impl Fn(&Value, &Value) -> Result<Value, ValueError> + Copy) {
     let b = vm.pop();
     let a = vm.pop();
 
@@ -224,7 +260,7 @@ fn binary_op(vm: &mut Vm, op: impl Fn(&Value, &Value) -> Result<Value, ValueErro
     }
 }
 
-fn unary_op(stack: &mut Vm, op: impl Fn(&Value) -> Result<Value, ValueError>  + Copy) {
+fn unary_op(stack: &mut Vm, op: impl Fn(&Value) -> Result<Value, ValueError> + Copy) {
     let a = stack.pop();
     let result = op(&a);
     match result {

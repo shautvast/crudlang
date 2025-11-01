@@ -585,7 +585,7 @@ fn calculate_type(
             match (declared_type, inferred_type) {
                 (I32, I64) => I32, //need this?
                 (I32, Integer) => I32,
-                (U32, U64) => U32,
+                (U32, I64) => U32,
                 (U32, Integer) => U32,
                 (F32, F64) => F32,
                 (F32, FloatingPoint) => F32,
