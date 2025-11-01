@@ -1,9 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use crate::{compile, run};
-    use crate::scanner::scan;
     use crate::value::Value;
-    use crate::vm::interpret;
+    use crate::{compile, run};
 
     #[test]
     fn literal_int() {
@@ -12,37 +10,43 @@ mod tests {
 
     #[test]
     fn literal_float() {
-        assert!(compile("2.1").is_ok());
+        assert_eq!(run("2.1"), Ok(Value::F64(2.1)));
     }
 
     #[test]
     fn literal_float_scientific() {
-        assert!(compile("2.1e5").is_ok());
+        assert_eq!(run("2.1e5"), Ok(Value::F64(2.1e5)));
     }
 
     #[test]
     fn literal_string() {
-        assert!(compile(r#""a""#).is_ok());
+        assert_eq!(run(r#""a""#), Ok(Value::String("a".into())));
     }
 
     #[test]
     fn literal_list() {
-        assert!(compile(r#"["abc","def"]"#).is_ok());
+        assert_eq!(run(r#"["abc","def"]"#), Ok(Value::List(vec![Value::String("abc".into()), Value::String("def".into())])));
     }
 
     #[test]
     fn let_infer_type() {
-        assert!(compile(r#"let a=1"#).is_ok());
+        assert_eq!(run(r#"let a=1
+a"#), Ok(Value::I64(1)));
     }
 
     #[test]
     fn let_u32() {
-        assert!(compile(r#"let a:u32=1"#).is_ok());
+        assert_eq!(run(r#"let a:u32=1
+a"#), Ok(Value::U32(1)));
     }
 
     #[test]
     fn let_char() {
-        assert!(scan(r#"let a:char='a'"#).is_ok());
+        assert_eq!(
+            run(r#"let a:char='a'
+a"#),
+            Ok(Value::Char('a'))
+        );
     }
 
     #[test]
@@ -83,15 +87,13 @@ mod tests {
 
     #[test]
     fn call_fn_with_args_returns_value() {
-        let r = compile(
-            r#"
+        assert_eq!(
+            run(r#"
 fn add_hello(name: string) -> string:
     "Hello " + name
-add_hello("world")"#,
+add_hello("world")"#,),
+            Ok(Value::String("Hello world".to_string()))
         );
-        assert!(r.is_ok());
-        let result = interpret(&r.unwrap(), "main").unwrap();
-        assert_eq!(result, Value::String("Hello world".to_string()));
     }
 
     #[test]
@@ -101,7 +103,7 @@ add_hello("world")"#,
 object Person:
    name: string"#,
         );
-        assert!(r.is_ok());
+        assert!(r.is_ok()); // does nothing runtime
     }
 
     //     #[test]
@@ -119,9 +121,9 @@ object Person:
 
     #[test]
     fn let_map() {
-        let r = compile(r#"{"name": "Dent", "age": 40 }"#);
-        assert!(r.is_ok());
-        let result = interpret(&r.unwrap(), "main").unwrap();
+        let result = run(r#"{"name": "Dent", "age": 40 }"#);
+        assert!(result.is_ok());
+        let result = result.unwrap();
         if let Value::Map(map) = result {
             assert_eq!(
                 map.get(&Value::String("name".to_string())).unwrap(),

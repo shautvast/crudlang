@@ -45,7 +45,7 @@ pub enum CompilerError {
 #[derive(Error, Debug, PartialEq)]
 pub enum RuntimeError {
     #[error("Error while executing")]
-    Value(#[from] ValueError),
+    ValueError(#[from] ValueError),
     #[error("Error occurred")]
     Something,
     #[error("Expected {0}, got {1}")]

@@ -74,15 +74,9 @@ impl Into<Value> for &str {
     }
 }
 
-impl From<String> for Value {
-    fn from(s: String) -> Self {
-        Value::String(s.clone())
-    }
-}
-
-impl From<&String> for Value {
-    fn from(s: &String) -> Self {
-        Value::String(s.clone())
+impl Into<Value> for String {
+    fn into(self) -> Value {
+        Value::String(self)
     }
 }
 
