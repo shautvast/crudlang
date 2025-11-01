@@ -1,13 +1,13 @@
 #[cfg(test)]
 mod tests {
-    use crate::compile;
+    use crate::{compile, run};
     use crate::scanner::scan;
     use crate::value::Value;
     use crate::vm::interpret;
 
     #[test]
     fn literal_int() {
-        assert!(compile("1").is_ok());
+        assert_eq!(run("1"), Ok(Value::I64(1)));
     }
 
     #[test]
@@ -52,7 +52,7 @@ mod tests {
         if let Err(e) = &r {
             assert_eq!(
                 e.to_string(),
-                "error at line 1: Incompatible types. Expected u32, found i32/64"
+                "Type mismatch at line 1: Incompatible types. Expected u32, found i32/64"
             );
         }
     }
@@ -64,7 +64,7 @@ mod tests {
         if let Err(e) = &r {
             assert_eq!(
                 e.to_string(),
-                "error at line 1: Incompatible types. Expected u64, found i32/64"
+                "Type mismatch at line 1: Incompatible types. Expected u64, found i32/64"
             );
         }
     }
@@ -76,7 +76,7 @@ mod tests {
         if let Err(e) = &r {
             assert_eq!(
                 e.to_string(),
-                "error at line 1: Incompatible types. Expected u64, found string"
+                "Type mismatch at line 1: Incompatible types. Expected u64, found string"
             );
         }
     }

@@ -10,12 +10,13 @@ use crate::vm::{
     OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
 use std::collections::HashMap;
+use crate::errors::CompilerError;
 
 pub fn compile(
     namespace: Option<&str>,
     ast: &Vec<Statement>,
     registry: &mut HashMap<String, Chunk>,
-) -> anyhow::Result<()> {
+) -> Result<(),CompilerError> {
     compile_name(ast, namespace, registry)
 }
 
@@ -23,7 +24,7 @@ pub(crate) fn compile_function(
     function: &Function,
     registry: &mut HashMap<String, Chunk>,
     namespace: &str,
-) -> anyhow::Result<Chunk> {
+) -> Result<Chunk, CompilerError> {
     let mut compiler = Compiler::new(&function.name.lexeme);
     for parm in &function.parameters {
         let name = parm.name.lexeme.clone();
@@ -39,7 +40,7 @@ pub(crate) fn compile_name(
     ast: &Vec<Statement>,
     namespace: Option<&str>,
     registry: &mut HashMap<String, Chunk>,
-) -> anyhow::Result<()> {
+) -> Result<(),CompilerError> {
     let name=namespace.unwrap_or("main");
     let compiler = Compiler::new(name);
     let chunk = compiler.compile(ast, registry, name)?;
@@ -74,7 +75,7 @@ impl Compiler {
         ast: &Vec<Statement>,
         registry: &mut HashMap<String, Chunk>,
         namespace: &str,
-    ) -> anyhow::Result<Chunk> {
+    ) -> Result<Chunk, CompilerError> {
         //TODO can likely be removed
         for statement in ast {
             if let Statement::FunctionStmt { function } = statement {
@@ -99,7 +100,7 @@ impl Compiler {
         statement: &Statement,
         registry: &mut HashMap<String, Chunk>,
         namespace: &str,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), CompilerError> {
         self.current_line = statement.line();
         match statement {
             Statement::VarStmt {
@@ -140,7 +141,7 @@ impl Compiler {
         namespace: &str,
         expression: &Expression,
         registry: &mut HashMap<String, Chunk>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), CompilerError> {
         match expression {
             Expression::FunctionCall {
                 name, arguments, ..
@@ -229,7 +230,7 @@ impl Compiler {
         var_type: &TokenType,
         name_index: usize,
         initializer: &Expression,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), CompilerError> {
         let def_op = match var_type {
             TokenType::I32 => OP_DEF_I32,
             TokenType::I64 => OP_DEF_I64,

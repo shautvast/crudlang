@@ -195,7 +195,6 @@ dependencies = [
 name = "crudlang"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "axum",
  "chrono",
  "dotenv",
@@ -203,6 +202,7 @@ dependencies = [
  "log4rs",
  "reqwest",
  "serde",
+ "thiserror",
  "tokio",
  "tokio-postgres",
  "tower",

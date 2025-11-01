@@ -1,6 +1,7 @@
 use crate::chunk::Chunk;
+use crate::errors::RuntimeError::{Something};
+use crate::errors::{RuntimeError, ValueError};
 use crate::value::Value;
-use anyhow::anyhow;
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -11,9 +12,8 @@ macro_rules! define_var {
         if let Value::$variant(_) = value {
             $self.local_vars.insert(name, value);
         } else {
-            return Err(anyhow!(
-                concat!("Expected ", stringify!($variant), ", got {:?}"),
-                value
+            return Err(RuntimeError::Expected(
+                 stringify!($variant), stringify!(value),
             ));
         }
     }};
@@ -27,7 +27,7 @@ pub struct Vm<'a> {
     registry: &'a HashMap<String, Chunk>,
 }
 
-pub fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> anyhow::Result<Value> {
+pub fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> Result<Value, RuntimeError> {
     let chunk = registry.get(function).unwrap().clone();
     // for (key,value) in registry.iter() {
     //     println!("{}", key);
@@ -43,7 +43,7 @@ pub fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> anyhow::R
     vm.run(&chunk, vec![])
 }
 
-pub async fn interpret_async(registry: &HashMap<String, Chunk>, function: &str) -> anyhow::Result<Value> {
+pub async fn interpret_async(registry: &HashMap<String, Chunk>, function: &str) -> Result<Value, RuntimeError> {
     let chunk = registry.get(function).unwrap().clone();
     let mut vm = Vm {
         ip: 0,
@@ -55,7 +55,7 @@ pub async fn interpret_async(registry: &HashMap<String, Chunk>, function: &str) 
     vm.run(&chunk, vec![])
 }
 
-pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> anyhow::Result<Value> {
+pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
     let mut vm = Vm {
         ip: 0,
         stack: vec![],
@@ -67,13 +67,13 @@ pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> anyhow::Result<Val
 }
 
 impl <'a> Vm<'a> {
-    fn run(&mut self, chunk: &Chunk, args: Vec<Value>) -> anyhow::Result<Value> {
+    fn run(&mut self, chunk: &Chunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
         for arg in args {
             self.push(arg);
         }
         loop {
             if self.error_occurred {
-                return Err(anyhow!("Error occurred"));
+                return Err(Something);
             }
             debug!("{:?}", self.stack);
             let opcode = chunk.code[self.ip];
@@ -91,14 +91,14 @@ impl <'a> Vm<'a> {
                     if let (Value::Bool(a), Value::Bool(b)) = (a, b) {
                         Ok(Value::Bool(*a && *b))
                     } else {
-                        Err(anyhow!("Cannot and"))
+                        Err(ValueError::Some("Cannot and"))
                     }
                 }),
                 OP_OR => binary_op(self, |a, b| {
                     if let (Value::Bool(a), Value::Bool(b)) = (a, b) {
                         Ok(Value::Bool(*a || *b))
                     } else {
-                        Err(anyhow!("Cannot compare"))
+                        Err(ValueError::Some("Cannot compare"))
                     }
                 }),
                 OP_NOT => unary_op(self, |a| !a),
@@ -210,7 +210,7 @@ impl <'a> Vm<'a> {
     }
 }
 
-fn binary_op(vm: &mut Vm, op: impl Fn(&Value, &Value) -> anyhow::Result<Value> + Copy) {
+fn binary_op(vm: &mut Vm, op: impl Fn(&Value, &Value) -> Result<Value, ValueError>  + Copy) {
     let b = vm.pop();
     let a = vm.pop();
 
@@ -218,13 +218,13 @@ fn binary_op(vm: &mut Vm, op: impl Fn(&Value, &Value) -> anyhow::Result<Value> +
     match result {
         Ok(result) => vm.push(result),
         Err(e) => {
-            println!("Error: {} {:?} and {:?}", e.to_string(), a, b);
             vm.error_occurred = true;
+            println!("Error: {} {:?} and {:?}", e.to_string(), a, b);
         }
     }
 }
 
-fn unary_op(stack: &mut Vm, op: impl Fn(&Value) -> anyhow::Result<Value> + Copy) {
+fn unary_op(stack: &mut Vm, op: impl Fn(&Value) -> Result<Value, ValueError>  + Copy) {
     let a = stack.pop();
     let result = op(&a);
     match result {

@@ -1,4 +1,4 @@
-use axum::extract::{Path, State};
+use axum::extract::{State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use axum::{Json, Router};
@@ -9,12 +9,13 @@ use crudlang::scanner::scan;
 use crudlang::vm::{interpret, interpret_async};
 use std::collections::HashMap;
 use std::fs;
-use std::hash::Hash;
 use std::sync::Arc;
 use walkdir::WalkDir;
+use crudlang::errors::Error;
+use crudlang::errors::Error::Platform;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), crudlang::errors::Error> {
     tracing_subscriber::fmt::init();
 
     let mut paths = HashMap::new();
@@ -23,12 +24,12 @@ async fn main() -> anyhow::Result<()> {
         let path = entry.path();
         if path.is_file() && path.ends_with("web.crud") {
             print!("compiling {:?}: ", path);
-            let source = fs::read_to_string(path)?;
+            let source = fs::read_to_string(path).map_err(map_underlying())?;
             let tokens = scan(&source)?;
             match ast_compiler::compile(tokens) {
                 Ok(statements) => {
                     let path = path
-                        .strip_prefix("source")?
+                        .strip_prefix("source").map_err(|e|Platform(e.to_string()))?
                         .to_str()
                         .unwrap()
                         .replace(".crud", "");
@@ -58,11 +59,15 @@ async fn main() -> anyhow::Result<()> {
                 get(handle_get).with_state(state.clone()),
             );
         }
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
-        println!("listening on {}", listener.local_addr()?);
-        axum::serve(listener, app).await?;
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.map_err(map_underlying())?;
+        println!("listening on {}", listener.local_addr().map_err(map_underlying())?);
+        axum::serve(listener, app).await.map_err(map_underlying())?;
     }
     Ok(())
+}
+
+fn map_underlying() -> fn(std::io::Error) -> Error {
+    |e| Error::Platform(e.to_string())
 }
 
 #[derive(Clone)]

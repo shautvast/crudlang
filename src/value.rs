@@ -1,10 +1,10 @@
-use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
+use crate::errors::ValueError;
 
 #[derive(Debug, Clone)]
 pub struct Object {
@@ -143,7 +143,7 @@ fn to_string(f: &mut Formatter, map: &HashMap<Value, Value>) -> std::fmt::Result
 }
 
 impl Neg for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
 
     fn neg(self) -> Self::Output {
         match self {
@@ -151,13 +151,13 @@ impl Neg for &Value {
             Value::I64(i) => Ok(Value::I64(-i)),
             Value::F32(i) => Ok(Value::F32(-i)),
             Value::F64(i) => Ok(Value::F64(-i)),
-            _ => Err(anyhow!("Cannot negate")),
+            _ => Err(ValueError::Some("Cannot negate")),
         }
     }
 }
 
 impl Add<&Value> for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
 
     fn add(self, rhs: &Value) -> Self::Output {
         if let Value::List(s) = self {
@@ -189,14 +189,14 @@ impl Add<&Value> for &Value {
                 }
                 (Value::String(s1), Value::Map(m)) => Ok(Value::String(format!("{}{:?}", s1, m))),
                 //enum?
-                _ => Err(anyhow!("Cannot add")),
+                _ => Err(ValueError::Some("Cannot add")),
             }
         }
     }
 }
 
 impl Sub<&Value> for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
 
     fn sub(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
@@ -207,13 +207,13 @@ impl Sub<&Value> for &Value {
             (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a - b)),
             (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a - b)),
             //enum?
-            _ => Err(anyhow!("Cannot subtract")),
+            _ => Err(ValueError::Some("Cannot subtract")),
         }
     }
 }
 
 impl Mul<&Value> for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
 
     fn mul(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
@@ -223,13 +223,13 @@ impl Mul<&Value> for &Value {
             (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a * b)),
             (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a * b)),
             (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a * b)),
-            _ => Err(anyhow!("Cannot multiply")),
+            _ => Err(ValueError::Some("Cannot multiply")),
         }
     }
 }
 
 impl Div<&Value> for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
 
     fn div(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
@@ -239,52 +239,52 @@ impl Div<&Value> for &Value {
             (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a / b)),
             (Value::F32(a), Value::F32(b)) => Ok(Value::F32(a / b)),
             (Value::F64(a), Value::F64(b)) => Ok(Value::F64(a / b)),
-            _ => Err(anyhow!("Cannot divide")),
+            _ => Err(ValueError::Some("Cannot divide")),
         }
     }
 }
 
 impl BitAnd<&Value> for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
     fn bitand(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
             (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a & b)),
             (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a & b)),
             (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a & b)),
             (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a & b)),
-            _ => Err(anyhow!("Cannot do bitwise-and on")),
+            _ => Err(ValueError::Some("Cannot do bitwise-and on")),
         }
     }
 }
 
 impl BitOr<&Value> for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
     fn bitor(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
             (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a | b)),
             (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a | b)),
             (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a | b)),
             (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a | b)),
-            _ => Err(anyhow!("Cannot do bitwise-or on")),
+            _ => Err(ValueError::Some("Cannot do bitwise-or on")),
         }
     }
 }
 
 impl BitXor<&Value> for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
     fn bitxor(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
             (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a ^ b)),
             (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a ^ b)),
             (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a ^ b)),
             (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a ^ b)),
-            _ => Err(anyhow!("Cannot do bitwise-xor on")),
+            _ => Err(ValueError::Some("Cannot do bitwise-xor on")),
         }
     }
 }
 
 impl Not for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
 
     fn not(self) -> Self::Output {
         match self {
@@ -293,33 +293,33 @@ impl Not for &Value {
             Value::I64(i64) => Ok(Value::I64(!i64)),
             Value::U32(u32) => Ok(Value::U32(!u32)),
             Value::U64(u64) => Ok(Value::U64(!u64)),
-            _ => Err(anyhow!("Cannot calculate not")),
+            _ => Err(ValueError::Some("Cannot calculate not")),
         }
     }
 }
 
 impl Shl<&Value> for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
     fn shl(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
             (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a << b)),
             (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a << b)),
             (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a << b)),
             (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a << b)),
-            _ => Err(anyhow!("Cannot shift left on")),
+            _ => Err(ValueError::Some("Cannot shift left on")),
         }
     }
 }
 
 impl Shr<&Value> for &Value {
-    type Output = anyhow::Result<Value>;
+    type Output = Result<Value, ValueError>;
     fn shr(self, rhs: &Value) -> Self::Output {
         match (self, rhs) {
             (Value::I32(a), Value::I32(b)) => Ok(Value::I32(a >> b)),
             (Value::I64(a), Value::I64(b)) => Ok(Value::I64(a >> b)),
             (Value::U32(a), Value::U32(b)) => Ok(Value::U32(a >> b)),
             (Value::U64(a), Value::U64(b)) => Ok(Value::U64(a >> b)),
-            _ => Err(anyhow!("Cannot shift right on")),
+            _ => Err(ValueError::Some("Cannot shift right on")),
         }
     }
 }
@@ -337,19 +337,19 @@ impl PartialEq for Value {
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Char(a), Value::Char(b)) => a == b,
             (Value::Date(a), Value::Date(b)) => a == b,
-            // (Value::List(a), Value::List(b)) => a == b,
-            // (Value::Map(a), Value::Map(b)) => {
-            //     let mut equal = true;
-            //     for (k, v) in a.iter() {
-            //         if !b.contains_key(k) || b.get(k).unwrap() != v {
-            //             //safe unwrap
-            //             equal = false;
-            //             break;
-            //         }
-            //     }
-            //     equal
-            // }
-            // struct?
+            (Value::List(a), Value::List(b)) => a == b,
+            (Value::Map(a), Value::Map(b)) => {
+                let mut equal = true;
+                for (k, v) in a.iter() {
+                    if !b.contains_key(k) || b.get(k).unwrap() != v {
+                        //safe unwrap
+                        equal = false;
+                        break;
+                    }
+                }
+                equal
+            }
+            // TODO objects
             _ => false, //?
         }
     }

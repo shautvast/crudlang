@@ -1,17 +1,17 @@
+use crate::errors::CompilerError::{self, Expected, IncompatibleTypes, ParseError, TooManyParameters, TypeError, UnexpectedIndent, UninitializedVariable};
 use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, Date, Eof, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater,
-    GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace, LeftBracket,
-    LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print,
-    RightBrace, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star, StringType,
-    True, U32, U64, UnsignedInteger,
+    Bang, Bool, Char, Colon, Date, Eof, Eol, Equal, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater,
+    Identifier, Indent, Integer, LeftBrace, LeftBracket, LeftParen, Less, LessEqual, LessLess,
+    Let, ListType, MapType, Minus, Object, Plus, Print, RightBrace, RightBracket, RightParen, SignedInteger,
+    SingleRightArrow, Slash, Star, StringType, True, UnsignedInteger, F32, F64,
+    I32, I64, U32, U64,
 };
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
-use anyhow::anyhow;
 use log::debug;
 use std::collections::HashMap;
 
-pub fn compile(tokens: Vec<Token>) -> anyhow::Result<Vec<Statement>> {
+pub fn compile(tokens: Vec<Token>) -> Result<Vec<Statement>, CompilerError> {
     let mut compiler = AstCompiler::new(tokens);
     compiler.compile_tokens()
 }
@@ -49,13 +49,13 @@ impl AstCompiler {
         self.current = 0;
     }
 
-    fn compile_tokens(&mut self) -> anyhow::Result<Vec<Statement>> {
+    fn compile_tokens(&mut self) -> Result<Vec<Statement>,CompilerError> {
         self.collect_functions()?;
         self.reset();
         self.compile()
     }
 
-    fn compile(&mut self) -> anyhow::Result<Vec<Statement>> {
+    fn compile(&mut self) -> Result<Vec<Statement>, CompilerError> {
         if !self.had_error {
             let mut statements = vec![];
             while !self.is_at_end() {
@@ -68,23 +68,23 @@ impl AstCompiler {
             }
             Ok(statements)
         } else {
-            Err(anyhow::anyhow!("Compilation failed."))
+            Err(CompilerError::Failure)
         }
     }
 
-    fn collect_functions(&mut self) -> anyhow::Result<()> {
+    fn collect_functions(&mut self) -> Result<(), CompilerError> {
         while !self.is_at_end() {
             if self.match_token(vec![Fn]) {
-                let name_token = self.consume(Identifier, "Expect function name.")?;
-                self.consume(LeftParen, "Expect '(' after function name.")?;
+                let name_token = self.consume(Identifier, Expected("function name."))?;
+                self.consume(LeftParen, Expected("'(' after function name."))?;
                 let mut parameters = vec![];
                 while !self.check(RightParen) {
                     if parameters.len() >= 25 {
-                        return Err(anyhow::anyhow!("Too many parameters."));
+                        return Err(TooManyParameters);
                     }
-                    let parm_name = self.consume(Identifier, "Expect parameter name.")?;
+                    let parm_name = self.consume(Identifier, Expected("a parameter name."))?;
 
-                    self.consume(Colon, "Expect : after parameter name")?;
+                    self.consume(Colon, Expected(": after parameter name"))?;
                     let var_type = self.peek().token_type;
                     self.vars.push(Expression::Variable {
                         name: parm_name.lexeme.to_string(),
@@ -100,15 +100,15 @@ impl AstCompiler {
                         self.advance();
                     }
                 }
-                self.consume(RightParen, "Expect ')' after parameters.")?;
+                self.consume(RightParen, Expected(" ')' after parameters."))?;
                 let return_type = if self.check(SingleRightArrow) {
-                    self.consume(SingleRightArrow, "")?;
+                    self.consume(SingleRightArrow, Expected("->"))?;
                     self.advance().token_type
                 } else {
                     TokenType::Void
                 };
-                self.consume(Colon, "Expect colon (:) after function declaration.")?;
-                self.consume(Eol, "Expect end of line.")?;
+                self.consume(Colon, Expected("colon (:) after function declaration."))?;
+                self.consume(Eol, Expected("end of line."))?;
 
                 let function = Function {
                     name: name_token.clone(),
@@ -125,7 +125,7 @@ impl AstCompiler {
         Ok(())
     }
 
-    fn indent(&mut self) -> anyhow::Result<Option<Statement>> {
+    fn indent(&mut self) -> Result<Option<Statement>, CompilerError> {
         let expected_indent = *self.indent.last().unwrap();
         // skip empty lines
         while self.check(Eol) {
@@ -138,10 +138,9 @@ impl AstCompiler {
             indent_on_line += 1;
         }
         if indent_on_line > expected_indent {
-            panic!(
-                "unexpected indent level {} vs expected {}",
+            Err(UnexpectedIndent(
                 indent_on_line, expected_indent
-            );
+            ))
         } else if indent_on_line < expected_indent {
             self.indent.pop();
             return Ok(None);
@@ -150,7 +149,7 @@ impl AstCompiler {
         }
     }
 
-    fn declaration(&mut self) -> anyhow::Result<Statement> {
+    fn declaration(&mut self) -> Result<Statement, CompilerError> {
         if self.match_token(vec![Fn]) {
             self.function_declaration()
         } else if self.match_token(vec![Let]) {
@@ -162,10 +161,10 @@ impl AstCompiler {
         }
     }
 
-    fn object_declaration(&mut self) -> anyhow::Result<Statement> {
-        let type_name = self.consume(Identifier, "Expect object name.")?;
-        self.consume(Colon, "Expect ':' after object name.")?;
-        self.consume(Eol, "Expect end of line.")?;
+    fn object_declaration(&mut self) -> Result<Statement, CompilerError> {
+        let type_name = self.consume(Identifier, Expected("object name."))?;
+        self.consume(Colon, Expected("':' after object name."))?;
+        self.consume(Eol, Expected("end of line."))?;
 
         let mut fields = vec![];
 
@@ -181,13 +180,13 @@ impl AstCompiler {
                 }
             }
             if !done {
-                let field_name = self.consume(Identifier, "Expect an object field name.")?;
-                self.consume(Colon, "Expect ':' after field name.")?;
+                let field_name = self.consume(Identifier, Expected("an object field name."))?;
+                self.consume(Colon, Expected("':' after field name."))?;
                 let field_type = self.peek().token_type;
                 if field_type.is_type() {
                     self.advance();
                 } else {
-                    Err(anyhow::anyhow!("Expected a type"))?
+                    Err(Expected("a type"))?
                 }
                 fields.push(Parameter {
                     name: field_name,
@@ -195,26 +194,26 @@ impl AstCompiler {
                 });
             }
         }
-        self.consume(Eol, "Expect end of line.")?;
+        self.consume(Eol, Expected("end of line."))?;
         Ok(Statement::ObjectStmt {
             name: type_name,
             fields,
         })
     }
 
-    fn function_declaration(&mut self) -> anyhow::Result<Statement> {
-        let name_token = self.consume(Identifier, "Expect function name.")?;
-        self.consume(LeftParen, "Expect '(' after function name.")?;
+    fn function_declaration(&mut self) -> Result<Statement, CompilerError> {
+        let name_token = self.consume(Identifier, Expected("function name."))?;
+        self.consume(LeftParen, Expected("'(' after function name."))?;
         while !self.check(RightParen) {
             self.advance();
         }
 
-        self.consume(RightParen, "Expect ')' after parameters.")?;
+        self.consume(RightParen, Expected("')' after parameters."))?;
         while !self.check(Colon) {
             self.advance();
         }
-        self.consume(Colon, "2Expect colon (:) after function declaration.")?;
-        self.consume(Eol, "Expect end of line.")?;
+        self.consume(Colon, Expected("colon (:) after function declaration."))?;
+        self.consume(Eol, Expected("end of line."))?;
 
         let current_indent = self.indent.last().unwrap();
         self.indent.push(current_indent + 1);
@@ -228,8 +227,8 @@ impl AstCompiler {
         Ok(function_stmt)
     }
 
-    fn let_declaration(&mut self) -> anyhow::Result<Statement> {
-        let name_token = self.consume(Identifier, "Expect variable name.")?;
+    fn let_declaration(&mut self) -> Result<Statement, CompilerError> {
+        let name_token = self.consume(Identifier, Expected("variable name."))?;
 
         let declared_type = if self.check(Colon) {
             self.advance();
@@ -240,14 +239,14 @@ impl AstCompiler {
 
         if self.match_token(vec![Equal]) {
             let initializer = self.expression()?;
-            self.consume(Eol, "Expect end of line after initializer.")?;
+            self.consume(Eol, Expected("end of line after initializer."))?;
 
             let inferred_type = initializer.infer_type();
             let var_type = match calculate_type(declared_type, inferred_type) {
                 Ok(var_type) => var_type,
                 Err(e) => {
                     self.had_error = true;
-                    return Err(anyhow!("error at line {}: {}", name_token.line, e));
+                    return Err(TypeError(name_token.line, Box::new(e)));
                 }
             };
             self.vars.push(Expression::Variable {
@@ -261,11 +260,11 @@ impl AstCompiler {
                 initializer,
             })
         } else {
-            Err(anyhow::anyhow!("Uninitialized variables are not allowed."))?
+            Err(UninitializedVariable)?
         }
     }
 
-    fn statement(&mut self) -> anyhow::Result<Statement> {
+    fn statement(&mut self) -> Result<Statement, CompilerError> {
         if self.match_token(vec![Print]) {
             self.print_statement()
         } else {
@@ -273,68 +272,68 @@ impl AstCompiler {
         }
     }
 
-    fn print_statement(&mut self) -> anyhow::Result<Statement> {
+    fn print_statement(&mut self) -> Result<Statement, CompilerError> {
         let expr = self.expression()?;
-        self.consume(Eol, "Expect end of line after print statement.")?;
+        self.consume(Eol, Expected("end of line after print statement."))?;
         Ok(Statement::PrintStmt { value: expr })
     }
 
-    fn expr_statement(&mut self) -> anyhow::Result<Statement> {
+    fn expr_statement(&mut self) -> Result<Statement, CompilerError> {
         let expr = self.expression()?;
-        self.consume(Eol, "Expect end of line after expression.")?;
+        self.consume(Eol, Expected("end of line after expression."))?;
         Ok(Statement::ExpressionStmt { expression: expr })
     }
 
-    fn expression(&mut self) -> anyhow::Result<Expression> {
+    fn expression(&mut self) -> Result<Expression, CompilerError> {
         self.or()
     }
 
-    fn or(&mut self) -> anyhow::Result<Expression> {
+    fn or(&mut self) -> Result<Expression, CompilerError> {
         let expr = self.and()?;
         self.binary(vec![TokenType::LogicalOr], expr)
     }
 
-    fn and(&mut self) -> anyhow::Result<Expression> {
+    fn and(&mut self) -> Result<Expression, CompilerError> {
         let expr = self.bit_and()?;
         self.binary(vec![TokenType::LogicalAnd], expr)
     }
 
-    fn bit_and(&mut self) -> anyhow::Result<Expression> {
+    fn bit_and(&mut self) -> Result<Expression, CompilerError> {
         let expr = self.bit_or()?;
         self.binary(vec![TokenType::BitAnd], expr)
     }
 
-    fn bit_or(&mut self) -> anyhow::Result<Expression> {
+    fn bit_or(&mut self) -> Result<Expression, CompilerError> {
         let expr = self.bit_xor()?;
         self.binary(vec![TokenType::BitOr], expr)
     }
 
-    fn bit_xor(&mut self) -> anyhow::Result<Expression> {
+    fn bit_xor(&mut self) -> Result<Expression, CompilerError> {
         let expr = self.equality()?;
         self.binary(vec![TokenType::BitXor], expr)
     }
 
-    fn equality(&mut self) -> anyhow::Result<Expression> {
+    fn equality(&mut self) -> Result<Expression, CompilerError> {
         let expr = self.comparison()?;
         self.binary(vec![TokenType::EqualEqual, TokenType::BangEqual], expr)
     }
 
-    fn comparison(&mut self) -> anyhow::Result<Expression> {
+    fn comparison(&mut self) -> Result<Expression, CompilerError> {
         let expr = self.bitshift()?;
         self.binary(vec![Greater, GreaterEqual, Less, LessEqual], expr)
     }
 
-    fn bitshift(&mut self) -> anyhow::Result<Expression> {
+    fn bitshift(&mut self) -> Result<Expression, CompilerError> {
         let expr = self.term()?;
         self.binary(vec![GreaterGreater, LessLess], expr)
     }
 
-    fn term(&mut self) -> anyhow::Result<Expression> {
+    fn term(&mut self) -> Result<Expression, CompilerError> {
         let expr = self.factor()?;
         self.binary(vec![Minus, Plus], expr)
     }
 
-    fn factor(&mut self) -> anyhow::Result<Expression> {
+    fn factor(&mut self) -> Result<Expression, CompilerError> {
         let expr = self.unary()?;
         self.binary(vec![Slash, Star], expr)
     }
@@ -343,7 +342,7 @@ impl AstCompiler {
         &mut self,
         types: Vec<TokenType>,
         mut expr: Expression,
-    ) -> anyhow::Result<Expression> {
+    ) -> Result<Expression, CompilerError> {
         while self.match_token(types.clone()) {
             let operator = self.previous().clone();
             let right = self.comparison()?;
@@ -357,7 +356,7 @@ impl AstCompiler {
         Ok(expr)
     }
 
-    fn unary(&mut self) -> anyhow::Result<Expression> {
+    fn unary(&mut self) -> Result<Expression, CompilerError> {
         if self.match_token(vec![Bang, Minus]) {
             let operator = self.previous().clone();
             let right = self.unary()?;
@@ -371,7 +370,7 @@ impl AstCompiler {
         }
     }
 
-    fn primary(&mut self) -> anyhow::Result<Expression> {
+    fn primary(&mut self) -> Result<Expression, CompilerError> {
         debug!("primary {:?}", self.peek());
         Ok(if self.match_token(vec![LeftBracket]) {
             self.list()?
@@ -393,13 +392,13 @@ impl AstCompiler {
             Expression::Literal {
                 line: self.peek().line,
                 literaltype: Integer,
-                value: Value::I64(self.previous().lexeme.parse()?),
+                value: Value::I64(self.previous().lexeme.parse().map_err(|e|ParseError(format!("{:?}",e)))?),
             }
         } else if self.match_token(vec![FloatingPoint]) {
             Expression::Literal {
                 line: self.peek().line,
                 literaltype: FloatingPoint,
-                value: Value::F64(self.previous().lexeme.parse()?),
+                value: Value::F64(self.previous().lexeme.parse().map_err(|e|ParseError(format!("{:?}",e)))?),
             }
         } else if self.match_token(vec![StringType]) {
             Expression::Literal {
@@ -415,7 +414,7 @@ impl AstCompiler {
             }
         } else if self.match_token(vec![LeftParen]) {
             let expr = self.expression()?;
-            self.consume(RightParen, "Expect ')' after expression.")?;
+            self.consume(RightParen, Expected("')' after expression."))?;
             Expression::Grouping {
                 line: self.peek().line,
                 expression: Box::new(expr),
@@ -431,14 +430,14 @@ impl AstCompiler {
         })
     }
 
-    fn list(&mut self) -> anyhow::Result<Expression> {
+    fn list(&mut self) -> Result<Expression, CompilerError> {
         let mut list = vec![];
         while !self.match_token(vec![RightBracket]) {
             list.push(self.expression()?);
             if self.peek().token_type == TokenType::Comma {
                 self.advance();
             } else {
-                self.consume(RightBracket, "Expect ']' after list.")?;
+                self.consume(RightBracket, Expected("']' at the end of the list."))?;
                 break;
             }
         }
@@ -449,17 +448,17 @@ impl AstCompiler {
         })
     }
 
-    fn map(&mut self) -> anyhow::Result<Expression> {
+    fn map(&mut self) -> Result<Expression, CompilerError> {
         let mut entries = vec![];
         while !self.match_token(vec![RightBrace]) {
             let key = self.expression()?;
-            self.consume(Colon, "Expect ':' after map key.")?;
+            self.consume(Colon, Expected("':' after map key."))?;
             let value = self.expression()?;
             entries.push((key, value));
             if self.peek().token_type == TokenType::Comma {
                 self.advance();
             } else {
-                self.consume(RightBrace, "Expect '}' after map.")?;
+                self.consume(RightBrace, Expected("'}' after map."))?;
                 break;
             }
         }
@@ -470,7 +469,7 @@ impl AstCompiler {
         })
     }
 
-    fn variable_lookup(&mut self, token: &Token) -> anyhow::Result<Expression> {
+    fn variable_lookup(&mut self, token: &Token) -> Result<Expression, CompilerError> {
         let (var_name, var_type) = self
             .vars
             .iter()
@@ -482,7 +481,7 @@ impl AstCompiler {
                 }
             })
             .find(|e| e.0 == &token.lexeme)
-            .ok_or_else(|| return anyhow::anyhow!("Unknown variable: {:?}", token))?;
+            .ok_or_else(|| return CompilerError::UndeclaredVariable(token.clone()))?;
         Ok(Expression::Variable {
             name: var_name.to_string(),
             var_type: var_type.clone(),
@@ -490,20 +489,19 @@ impl AstCompiler {
         })
     }
 
-    fn function_call(&mut self, name: String) -> anyhow::Result<Expression> {
+    fn function_call(&mut self, name: String) -> Result<Expression, CompilerError> {
         let function_name = self.functions.get(&name).unwrap().name.lexeme.clone();
         let function = self.functions.get(&function_name).unwrap().clone();
 
         let mut arguments = vec![];
         while !self.match_token(vec![RightParen]) {
             if arguments.len() >= 25 {
-                return Err(anyhow::anyhow!("Too many parameters."));
+                return Err(TooManyParameters);
             }
             let arg = self.expression()?;
             let arg_type = arg.infer_type();
             if arg_type != function.parameters[arguments.len()].var_type {
-                return Err(anyhow::anyhow!(
-                    "Incompatible argument types. Expected {}, found {}",
+                return Err(IncompatibleTypes(
                     function.parameters[arguments.len()].var_type,
                     arg_type
                 ));
@@ -512,7 +510,7 @@ impl AstCompiler {
             if self.peek().token_type == TokenType::Comma {
                 self.advance();
             } else {
-                self.consume(RightParen, "Expect ')' after arguments.")?;
+                self.consume(RightParen, Expected("')' after arguments."))?;
                 break;
             }
         }
@@ -525,16 +523,17 @@ impl AstCompiler {
         })
     }
 
-    fn consume(&mut self, token_type: TokenType, message: &str) -> anyhow::Result<Token> {
+    fn consume(&mut self, token_type: TokenType, message: CompilerError) -> Result<Token, CompilerError> {
         if self.check(token_type) {
             self.advance();
         } else {
             self.had_error = true;
-            return Err(anyhow::anyhow!(
-                "{} at {:?}",
-                message.to_string(),
-                self.peek()
-            ));
+            // return Err(anyhow::anyhow!(
+            //     "{} at {:?}",
+            //     message.to_string(),
+            //     self.peek()
+            // ));
+            return Err(message);
         }
         Ok(self.previous().clone())
     }
@@ -580,7 +579,7 @@ impl AstCompiler {
 fn calculate_type(
     declared_type: Option<TokenType>,
     inferred_type: TokenType,
-) -> anyhow::Result<TokenType> {
+) -> Result<TokenType, CompilerError> {
     Ok(if let Some(declared_type) = declared_type {
         if declared_type != inferred_type {
             match (declared_type, inferred_type) {
@@ -596,8 +595,7 @@ fn calculate_type(
                 (U64, I32) => U64,
                 (StringType, _) => StringType, // meh, this all needs rigorous testing. Update: this is in progress
                 _ => {
-                    return Err(anyhow::anyhow!(
-                        "Incompatible types. Expected {}, found {}",
+                    return Err(IncompatibleTypes(
                         declared_type,
                         inferred_type
                     ));
@@ -615,7 +613,7 @@ fn calculate_type(
             ListType => ListType,
             MapType => MapType,
             Object => Object,
-            _ => panic!("Unexpected type"),
+            _ => return Err(CompilerError::UnexpectedType(inferred_type)),
         }
     })
 }
