@@ -228,6 +228,9 @@ impl AstCompiler {
     }
 
     fn let_declaration(&mut self) -> Result<Statement, CompilerError> {
+        if self.peek().token_type.is_type(){
+            return Err(CompilerError::KeywordNotAllowedAsIdentifier(self.peek().token_type))
+        }
         let name_token = self.consume(Identifier, Expected("variable name."))?;
 
         let declared_type = if self.check(Colon) {

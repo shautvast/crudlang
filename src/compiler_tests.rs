@@ -29,19 +29,19 @@ mod tests {
     }
 
     #[test]
-    fn let_infer_type() {
+    fn infer_type() {
         assert_eq!(run(r#"let a=1
 a"#), Ok(Value::I64(1)));
     }
 
     #[test]
-    fn let_u32() {
+    fn define_u32() {
         assert_eq!(run(r#"let a:u32=1
 a"#), Ok(Value::U32(1)));
     }
 
     #[test]
-    fn let_char() {
+    fn define_char() {
         assert_eq!(
             run(r#"let a:char='a'
 a"#),
@@ -50,7 +50,7 @@ a"#),
     }
 
     #[test]
-    fn let_u32_invalid_value_negative() {
+    fn define_u32_invalid_value_negative() {
         let r = compile("let a:u32=-1");
         assert!(r.is_err());
         if let Err(e) = &r {
@@ -62,7 +62,7 @@ a"#),
     }
 
     #[test]
-    fn let_u64_invalid_value_negative() {
+    fn define_u64_invalid_value_negative() {
         let r = compile("let a:u64=-1");
         assert!(r.is_err());
         if let Err(e) = &r {
@@ -97,7 +97,7 @@ add_hello("world")"#,),
     }
 
     #[test]
-    fn object_definition() {
+    fn define_object() {
         let r = compile(
             r#"
 object Person:
@@ -120,7 +120,7 @@ object Person:
     //     }
 
     #[test]
-    fn let_map() {
+    fn literal_map() {
         let result = run(r#"{"name": "Dent", "age": 40 }"#);
         assert!(result.is_ok());
         let result = result.unwrap();
@@ -131,8 +131,29 @@ object Person:
             );
             assert_eq!(
                 map.get(&Value::String("age".to_string())).unwrap(),
-                &Value::I32(40)
+                &Value::I64(40)
             );
         }
+    }
+
+    #[test]
+    fn define_map() {
+        let result = run(r#"let m = {"name": "Dent"}
+m"#);
+
+        let result = result.unwrap();
+        if let Value::Map(map) = result {
+            assert_eq!(
+                map.get(&Value::String("name".to_string())).unwrap(),
+                &Value::String("Dent".to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn keyword_error(){
+        let result = run(r#"let map = {"name": "Dent"}"#);
+        assert!(result.is_err());
+        assert_eq!("'map' is a keyword. You cannot use it as an identifier",result.unwrap_err().to_string());
     }
 }

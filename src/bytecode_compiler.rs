@@ -1,16 +1,22 @@
 use crate::ast_compiler::{Expression, Function, Statement};
 use crate::chunk::Chunk;
+use crate::errors::CompilerError;
 use crate::tokens::TokenType;
 use crate::value::Value;
-use crate::vm::{OP_ADD, OP_AND, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_CHAR, OP_DEF_DATE, OP_DEF_F32, OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_MAP, OP_DEF_STRING, OP_DEF_STRUCT, OP_DEFINE, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT, OP_DEF_U32};
+use crate::vm::{
+    OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_BOOL,
+    OP_DEF_CHAR, OP_DEF_DATE, OP_DEF_F32, OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST,
+    OP_DEF_MAP, OP_DEF_STRING, OP_DEF_STRUCT, OP_DEF_U32, OP_DEFINE, OP_DIVIDE, OP_EQUAL, OP_GET,
+    OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR,
+    OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+};
 use std::collections::HashMap;
-use crate::errors::CompilerError;
 
 pub fn compile(
     namespace: Option<&str>,
     ast: &Vec<Statement>,
     registry: &mut HashMap<String, Chunk>,
-) -> Result<(),CompilerError> {
+) -> Result<(), CompilerError> {
     compile_name(ast, namespace, registry)
 }
 
@@ -22,9 +28,10 @@ pub(crate) fn compile_function(
     let mut compiler = Compiler::new(&function.name.lexeme);
     for parm in &function.parameters {
         let name = parm.name.lexeme.clone();
-        let name_index = compiler.chunk.add_constant(Value::String(name.clone()));
-        compiler.vars.insert(name, name_index);
-        compiler.emit_bytes(OP_DEFINE, name_index as u16);
+        let var_index = compiler.chunk.add_var(&parm.var_type, &parm.name.lexeme);
+
+        compiler.vars.insert(name, var_index);
+        // compiler.emit_bytes(OP_DEFINE, name_index as u16);
     }
 
     Ok(compiler.compile(&function.body, registry, namespace)?)
@@ -34,11 +41,11 @@ pub(crate) fn compile_name(
     ast: &Vec<Statement>,
     namespace: Option<&str>,
     registry: &mut HashMap<String, Chunk>,
-) -> Result<(),CompilerError> {
-    let name=namespace.unwrap_or("main");
+) -> Result<(), CompilerError> {
+    let name = namespace.unwrap_or("main");
     let compiler = Compiler::new(name);
     let chunk = compiler.compile(ast, registry, name)?;
-    let qname = if let Some(namespace) = namespace{
+    let qname = if let Some(namespace) = namespace {
         format!("{}.{}", namespace, "main")
     } else {
         "main".to_string()
@@ -70,17 +77,6 @@ impl Compiler {
         registry: &mut HashMap<String, Chunk>,
         namespace: &str,
     ) -> Result<Chunk, CompilerError> {
-        //TODO can likely be removed
-        for statement in ast {
-            if let Statement::FunctionStmt { function } = statement {
-                self.emit_constant(Value::String(format!(
-                    "{}.{}",
-                    namespace,
-                    function.name.lexeme.clone()
-                )));
-            }
-        }
-
         for statement in ast {
             self.compile_statement(statement, registry, namespace)?;
         }
@@ -102,10 +98,10 @@ impl Compiler {
                 var_type,
                 initializer,
             } => {
-                let name_index = self.chunk.add_constant(Value::String(name.lexeme.clone()));
+                let name_index = self.chunk.add_var(var_type, &name.lexeme);
                 self.vars.insert(name.lexeme.clone(), name_index);
                 self.compile_expression(namespace, initializer, registry)?;
-                self.define_variable(var_type, name_index, &initializer)?;
+                self.emit_bytes(OP_ASSIGN, name_index as u16);
             }
             Statement::PrintStmt { value } => {
                 self.compile_expression(namespace, value, registry)?;
@@ -116,7 +112,7 @@ impl Compiler {
             }
             Statement::FunctionStmt { function } => {
                 let function_name = function.name.lexeme.clone();
-                self.emit_constant(Value::String(function_name.clone()));
+                // self.emit_constant(Value::String(function_name.clone()));
                 let compiled_function = compile_function(function, registry, namespace)?;
                 registry.insert(
                     format!("{}.{}", self.chunk.name, function_name),
@@ -140,7 +136,7 @@ impl Compiler {
             Expression::FunctionCall {
                 name, arguments, ..
             } => {
-                let qname=format!("{}.{}", namespace, name);
+                let qname = format!("{}.{}", namespace, name);
                 let name_index = self
                     .chunk
                     .find_constant(&qname)
@@ -163,12 +159,14 @@ impl Compiler {
                 for expr in values {
                     self.compile_expression(namespace, expr, registry)?;
                 }
+                self.emit_bytes(OP_DEF_LIST, values.len() as u16);
             }
             Expression::Map { entries, .. } => {
                 for (key, value) in entries {
                     self.compile_expression(namespace, key, registry)?;
                     self.compile_expression(namespace, value, registry)?;
                 }
+                self.emit_bytes(OP_DEF_MAP, entries.len() as u16);
             }
             Expression::Grouping { expression, .. } => {
                 self.compile_expression(namespace, expression, registry)?
@@ -215,42 +213,6 @@ impl Compiler {
                     _ => unimplemented!("binary other than plus, minus, star, slash"),
                 }
             }
-        }
-        Ok(())
-    }
-
-    fn define_variable(
-        &mut self,
-        var_type: &TokenType,
-        name_index: usize,
-        initializer: &Expression,
-    ) -> Result<(), CompilerError> {
-        let def_op = match var_type {
-            TokenType::I32 => OP_DEF_I32,
-            TokenType::I64 => OP_DEF_I64,
-            TokenType::U32 => OP_DEF_U32,
-            TokenType::U64 => OP_DEF_I64,
-            TokenType::F32 => OP_DEF_F32,
-            TokenType::F64 => OP_DEF_F64,
-            TokenType::Date => OP_DEF_DATE,
-            TokenType::StringType => OP_DEF_STRING,
-            TokenType::Char => OP_DEF_CHAR,
-            TokenType::Bool => OP_DEF_BOOL,
-            TokenType::ListType => OP_DEF_LIST,
-            TokenType::MapType => OP_DEF_MAP,
-            TokenType::Object => OP_DEF_STRUCT,
-            _ => unimplemented!("{}", var_type),
-        };
-
-        self.emit_bytes(def_op, name_index as u16);
-        match initializer {
-            Expression::List { values, .. } => {
-                self.emit_byte(values.len() as u16);
-            }
-            Expression::Map { entries, .. } => {
-                self.emit_byte(entries.len() as u16);
-            }
-            _ => {}
         }
         Ok(())
     }

@@ -1,10 +1,10 @@
+use crate::errors::ValueError;
 use chrono::{DateTime, Utc};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
-use crate::errors::ValueError;
 
 #[derive(Debug, Clone)]
 pub struct Object {
@@ -30,6 +30,56 @@ pub enum Value {
     ObjectType(Box<Object>),
     Error(String),
     Void,
+}
+
+impl Value {
+    pub fn cast_u32(self) -> Result<Self, ValueError> {
+        match self {
+            Value::U32(v) => Ok(Value::U32(v)),
+            Value::U64(v) => Ok(Value::U32(v as u32)),
+            Value::I32(v) => Ok(Value::U32(v as u32)),
+            Value::I64(v) => Ok(Value::U32(v as u32)),
+            Value::F32(v) => Ok(Value::U32(v as u32)),
+            Value::F64(v) => Ok(Value::U32(v as u32)),
+            _ => Err(ValueError::IllegalCast),
+        }
+    }
+
+    pub fn cast_u64(self) -> Result<Self, ValueError> {
+        match self {
+            Value::U32(v) => Ok(Value::U64(v as u64)),
+            Value::U64(v) => Ok(Value::U64(v)),
+            Value::I32(v) => Ok(Value::U64(v as u64)),
+            Value::I64(v) => Ok(Value::U64(v as u64)),
+            Value::F32(v) => Ok(Value::U64(v as u64)),
+            Value::F64(v) => Ok(Value::U64(v as u64)),
+            _ => Err(ValueError::IllegalCast),
+        }
+    }
+
+    pub fn cast_i32(self) -> Result<Self, ValueError> {
+        match self {
+            Value::U32(v) => Ok(Value::I32(v as i32)),
+            Value::U64(v) => Ok(Value::I32(v as i32)),
+            Value::I32(v) => Ok(Value::I32(v)),
+            Value::I64(v) => Ok(Value::I32(v as i32)),
+            Value::F32(v) => Ok(Value::I32(v as i32)),
+            Value::F64(v) => Ok(Value::I32(v as i32)),
+            _ => Err(ValueError::IllegalCast),
+        }
+    }
+
+    pub fn cast_f32(self) -> Result<Self, ValueError> {
+        match self {
+            Value::U32(v) => Ok(Value::F32(v as f32)),
+            Value::U64(v) => Ok(Value::F32(v as f32)),
+            Value::I32(v) => Ok(Value::F32(v as f32)),
+            Value::I64(v) => Ok(Value::F32(v as f32)),
+            Value::F32(v) => Ok(Value::F32(v)),
+            Value::F64(v) => Ok(Value::F32(v as f32)),
+            _ => Err(ValueError::IllegalCast),
+        }
+    }
 }
 
 impl Into<Value> for i32 {

@@ -4,6 +4,7 @@ use crate::errors::{RuntimeError, ValueError};
 use crate::value::Value;
 use std::collections::HashMap;
 use tracing::debug;
+use crate::tokens::TokenType;
 
 macro_rules! define_var {
     ($self:ident, $variant:ident, $chunk:ident) => {{
@@ -40,7 +41,7 @@ pub fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> Result<Va
         error_occurred: false,
         registry,
     };
-    vm.run(&chunk, vec![])
+    vm.run(&chunk)
 }
 
 pub async fn interpret_async(registry: &HashMap<String, Chunk>, function: &str) -> Result<Value, RuntimeError> {
@@ -52,7 +53,7 @@ pub async fn interpret_async(registry: &HashMap<String, Chunk>, function: &str) 
         error_occurred: false,
         registry,
     };
-    vm.run(&chunk, vec![])
+    vm.run(&chunk)
 }
 
 pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
@@ -63,14 +64,20 @@ pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, Runt
         error_occurred: false,
         registry: &HashMap::new(),
     };
-    vm.run(chunk, args)
+
+    vm.run_function(chunk, args)
 }
 
 impl<'a> Vm<'a> {
-    fn run(&mut self, chunk: &Chunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
-        for arg in args {
-            self.push(arg);
+    fn run_function(&mut self, chunk: &Chunk, mut args: Vec<Value>) -> Result<Value, RuntimeError> {
+        // arguments -> locals
+        for (_,name) in chunk.vars.iter() {
+            self.local_vars.insert(name.clone(), args.remove(0));
         }
+        self.run(&chunk)
+    }
+
+    fn run(&mut self, chunk: &Chunk) -> Result<Value, RuntimeError> {
         loop {
             if self.error_occurred {
                 return Err(Something);
@@ -131,64 +138,30 @@ impl<'a> Vm<'a> {
                     let value = self.pop();
                     self.local_vars.insert(name, value);
                 }
-                OP_DEF_I32 => {
-                    let name = self.read_name(chunk);
-                    let value = self.pop();
-                    let value = match value{
-                        Value::I32(v) => Value::I32(v),
-                        Value::I64(v) => Value::I32(v as i32),
-                        _ => unreachable!(),
-                    };
-                    self.local_vars.insert(name, value);
-                }
-                OP_DEF_I64 => define_var!(self, I64, chunk),
-                OP_DEF_U32 => {
-                    let name = self.read_name(chunk);
-                    let value = self.pop();
-                    let value = match value{
-                        Value::U32(v) => Value::U32(v),
-                        Value::I64(v) => Value::U32(v as u32),
-                        _ => unreachable!(),
-                    };
-                    self.local_vars.insert(name, value);
-                }
-                OP_DEF_U64 => {
-                    let name = self.read_name(chunk);
-                    let value = self.pop();
-                    let value = match value{
-                        Value::U64(v) => Value::U64(v),
-                        Value::I64(v) => Value::U64(v as u64),
-                        _ => unreachable!(),
-                    };
-                    self.local_vars.insert(name, value);
-                }
-                OP_DEF_F32 => {
-                    let name = self.read_name(chunk);
-                    let value = self.pop();
-                    let value = match value{
-                        Value::F32(v) => Value::F32(v),
-                        Value::F64(v) => Value::F32(v as f32),
-                        _ => unreachable!(),
-                    };
-                    self.local_vars.insert(name, value);
-                }
-                OP_DEF_F64 => define_var!(self, F64, chunk),
-                OP_DEF_STRING => define_var!(self, String, chunk),
-                OP_DEF_CHAR => define_var!(self, Char, chunk),
-                OP_DEF_BOOL => define_var!(self, Bool, chunk),
-                OP_DEF_DATE => define_var!(self, Date, chunk),
                 OP_DEF_LIST => {
-                    let name = self.read_name(chunk);
                     let len = self.read(chunk);
                     let mut list = vec![];
                     for _ in 0..len {
                         let value = self.pop();
                         list.push(value);
                     }
-                    self.local_vars.insert(name, Value::List(list));
+                    list.reverse();
+                    self.push(Value::List(list));
+                }
+                OP_ASSIGN=>{
+                    let index = self.read(chunk);
+                    let (var_type, name) = chunk.vars.get(index).unwrap();
+                    let value = self.pop();
+                    let value = match var_type{
+                        TokenType::U32 => value.cast_u32()?,
+                        TokenType::U64 => value.cast_u64()?,
+                        TokenType::F32 => value.cast_f32()?,
+                        TokenType::I32 => value.cast_i32()?,
+                        _ => value,
+                    };
+                    self.local_vars.insert(name.to_string(), value);
                 }
                 OP_DEF_MAP => {
-                    let name = self.read_name(chunk);
                     let len = self.read(chunk);
                     let mut map = HashMap::new();
                     for _ in 0..len {
@@ -196,12 +169,13 @@ impl<'a> Vm<'a> {
                         let key = self.pop();
                         map.insert(key, value);
                     }
-                    self.local_vars.insert(name, Value::Map(map));
+                    self.push(Value::Map(map));
                 }
                 OP_GET => {
-                    let name = self.read_name(chunk);
-                    let value = self.local_vars.get(&name).unwrap();
-                    self.push(value.clone()); // not happy
+                    let var_index = self.read(chunk);
+                    let (_,name_index)= chunk.vars.get(var_index).unwrap();
+                    let value = self.local_vars.get(name_index).unwrap();
+                    self.push(value.clone()); // not happy , take ownership, no clone
                     debug!("after get {:?}", self.stack);
                 }
                 OP_CALL => {
@@ -309,4 +283,4 @@ pub const OP_DEF_MAP: u16 = 37;
 pub const OP_DEF_STRUCT: u16 = 38;
 pub const OP_DEF_F32: u16 = 39;
 pub const OP_DEF_F64: u16 = 40;
-// pub const OP_NEW_LIST: u16 = 40;
+pub const OP_ASSIGN: u16 = 41;

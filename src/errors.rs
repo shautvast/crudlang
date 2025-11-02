@@ -1,5 +1,5 @@
-use thiserror::Error;
 use crate::tokens::{Token, TokenType};
+use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
@@ -11,7 +11,6 @@ pub enum Error {
     Platform(String),
 }
 
-
 #[derive(Error, Debug, PartialEq)]
 pub enum CompilerError {
     #[error("Compilation failed")]
@@ -21,7 +20,7 @@ pub enum CompilerError {
     #[error("Expected {0}")]
     Expected(&'static str),
     #[error("unexpected indent level {0} vs expected {1}")]
-    UnexpectedIndent(usize,usize),
+    UnexpectedIndent(usize, usize),
     #[error("Type mismatch at line {0}: {1}")]
     TypeError(usize, Box<CompilerError>),
     #[error("Uninitialized variables are not allowed.")]
@@ -39,7 +38,9 @@ pub enum CompilerError {
     #[error("Illegal char length for {0} at line {1}")]
     IllegalCharLength(String, usize),
     #[error("Unexpected type {0}")]
-    UnexpectedType(TokenType)
+    UnexpectedType(TokenType),
+    #[error("'{0}' is a keyword. You cannot use it as an identifier")]
+    KeywordNotAllowedAsIdentifier(TokenType),
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -58,4 +59,6 @@ pub enum ValueError {
     CannotAnd(&'static str),
     #[error("{0}")]
     Some(&'static str),
+    #[error("Illegal cast")]
+    IllegalCast,
 }

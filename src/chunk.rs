@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use crate::ast_compiler::Parameter;
+use crate::tokens::TokenType;
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_F32,
@@ -14,7 +15,8 @@ pub struct Chunk {
     pub code: Vec<u16>,
     pub constants: Vec<Value>,
     lines: Vec<usize>,
-    object_defs: HashMap<String, Vec<Parameter>>
+    object_defs: HashMap<String, Vec<Parameter>>,
+    pub vars: Vec<(TokenType, String)>
 }
 
 impl Chunk {
@@ -38,6 +40,7 @@ impl Chunk {
             constants: vec![],
             lines: vec![],
             object_defs: HashMap::new(),
+            vars: vec![]
         }
     }
 
@@ -49,6 +52,11 @@ impl Chunk {
     pub(crate) fn add_constant(&mut self, value: impl Into<Value>) -> usize {
         self.constants.push(value.into());
         self.constants.len() - 1
+    }
+
+    pub(crate) fn add_var(&mut self, var_type: &TokenType, name: &str) -> usize {
+        self.vars.push((var_type.clone(), name.to_string()));
+        self.vars.len() - 1
     }
 
     pub (crate) fn add_object_def(&mut self, name: &str, fields: &[Parameter]){
