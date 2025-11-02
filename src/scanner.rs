@@ -6,10 +6,10 @@ use crate::{
         TokenType::{self},
     },
 };
-use crate::errors::CompilerError;
+use crate::errors::{CompilerError, CompilerErrorAtLine};
 use crate::errors::CompilerError::{IllegalCharLength, UnexpectedIdentifier, Unterminated};
 
-pub fn scan(source: &str) -> Result<Vec<Token>, CompilerError> {
+pub fn scan(source: &str) -> Result<Vec<Token>, CompilerErrorAtLine> {
     let scanner = Scanner {
         chars: source.chars().collect(),
         current: 0,
@@ -22,7 +22,7 @@ pub fn scan(source: &str) -> Result<Vec<Token>, CompilerError> {
 }
 
 impl Scanner {
-    fn scan(mut self) -> Result<Vec<Token>, CompilerError> {
+    fn scan(mut self) -> Result<Vec<Token>, CompilerErrorAtLine> {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_token()?;
@@ -32,7 +32,7 @@ impl Scanner {
         Ok(self.tokens)
     }
 
-    fn scan_token(&mut self) -> Result<(),CompilerError> {
+    fn scan_token(&mut self) -> Result<(),CompilerErrorAtLine> {
         let c = self.advance();
         if self.new_line && (c == ' ' || c == '\t') {
             self.add_token(TokenType::Indent);
@@ -139,7 +139,7 @@ impl Scanner {
                     } else if is_alpha(c) {
                         self.identifier();
                     } else {
-                        return Err(UnexpectedIdentifier(self.line));
+                        return Err(self.raise(UnexpectedIdentifier));
                     }
                 }
             }
@@ -174,13 +174,13 @@ impl Scanner {
         self.add_token_with_value(if has_dot { FloatingPoint } else { Integer }, value);
     }
 
-    fn char(&mut self) -> Result<(), CompilerError>{
+    fn char(&mut self) -> Result<(), CompilerErrorAtLine> {
         while self.peek() != '\'' && !self.is_at_end() {
             self.advance();
         }
 
         if self.is_at_end() {
-            return Err(Unterminated("char", self.line))
+            return Err(CompilerErrorAtLine::raise(Unterminated("char"), self.line))
         }
 
         self.advance();
@@ -189,13 +189,17 @@ impl Scanner {
             .iter()
             .collect();
         if value.len() != 1 {
-            return Err(IllegalCharLength(value, self.line))
+            return Err(self.raise(IllegalCharLength(value)));
         }
         self.add_token_with_value(TokenType::Char, value);
         Ok(())
     }
 
-    fn string(&mut self) -> Result<(),CompilerError> {
+    fn raise(&self, error: CompilerError) -> CompilerErrorAtLine {
+        CompilerErrorAtLine::raise(error, self.line)
+    }
+
+    fn string(&mut self) -> Result<(),CompilerErrorAtLine> {
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -204,7 +208,7 @@ impl Scanner {
         }
 
         if self.is_at_end() {
-            return Err(Unterminated("string", self.line))
+            return Err(self.raise(Unterminated("string")));
         }
 
         self.advance();

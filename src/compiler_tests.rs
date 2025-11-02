@@ -56,7 +56,7 @@ a"#),
         if let Err(e) = &r {
             assert_eq!(
                 e.to_string(),
-                "Type mismatch at line 1: Incompatible types. Expected u32, found i32/64"
+                "Compilation failed: error at line 1, Type mismatch: Expected u32, found i32/64"
             );
         }
     }
@@ -68,7 +68,7 @@ a"#),
         if let Err(e) = &r {
             assert_eq!(
                 e.to_string(),
-                "Type mismatch at line 1: Incompatible types. Expected u64, found i32/64"
+                "Compilation failed: error at line 1, Type mismatch: Expected u64, found i32/64"
             );
         }
     }
@@ -80,7 +80,7 @@ a"#),
         if let Err(e) = &r {
             assert_eq!(
                 e.to_string(),
-                "Type mismatch at line 1: Incompatible types. Expected u64, found string"
+                "Compilation failed: error at line 1, Type mismatch: Expected u64, found string"
             );
         }
     }
@@ -154,6 +154,6 @@ m"#);
     fn keyword_error(){
         let result = run(r#"let map = {"name": "Dent"}"#);
         assert!(result.is_err());
-        assert_eq!("'map' is a keyword. You cannot use it as an identifier",result.unwrap_err().to_string());
+        assert_eq!("Compilation failed: error at line 1, 'map' is a keyword. You cannot use it as an identifier",result.unwrap_err().to_string());
     }
 }

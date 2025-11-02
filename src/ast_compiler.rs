@@ -10,8 +10,9 @@ use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use log::debug;
 use std::collections::HashMap;
+use crate::errors::CompilerErrorAtLine;
 
-pub fn compile(tokens: Vec<Token>) -> Result<Vec<Statement>, CompilerError> {
+pub fn compile(tokens: Vec<Token>) -> Result<Vec<Statement>, CompilerErrorAtLine> {
     let mut compiler = AstCompiler::new(tokens);
     compiler.compile_tokens()
 }
@@ -49,13 +50,16 @@ impl AstCompiler {
         self.current = 0;
     }
 
-    fn compile_tokens(&mut self) -> Result<Vec<Statement>,CompilerError> {
+    fn compile_tokens(&mut self) -> Result<Vec<Statement>,CompilerErrorAtLine> {
         self.collect_functions()?;
         self.reset();
         self.compile()
     }
 
-    fn compile(&mut self) -> Result<Vec<Statement>, CompilerError> {
+
+
+    fn compile(&mut self) -> Result<Vec<Statement>, CompilerErrorAtLine> {
+        self.current_line();
         if !self.had_error {
             let mut statements = vec![];
             while !self.is_at_end() {
@@ -68,11 +72,15 @@ impl AstCompiler {
             }
             Ok(statements)
         } else {
-            Err(CompilerError::Failure)
+            Err(self.raise(CompilerError::Failure))
         }
     }
 
-    fn collect_functions(&mut self) -> Result<(), CompilerError> {
+    fn raise(&self, error: CompilerError) -> CompilerErrorAtLine {
+        CompilerErrorAtLine::raise(error, self.current_line())
+    }
+
+    fn collect_functions(&mut self) -> Result<(), CompilerErrorAtLine> {
         while !self.is_at_end() {
             if self.match_token(vec![Fn]) {
                 let name_token = self.consume(Identifier, Expected("function name."))?;
@@ -80,7 +88,7 @@ impl AstCompiler {
                 let mut parameters = vec![];
                 while !self.check(RightParen) {
                     if parameters.len() >= 25 {
-                        return Err(TooManyParameters);
+                        return Err(self.raise(TooManyParameters));
                     }
                     let parm_name = self.consume(Identifier, Expected("a parameter name."))?;
 
@@ -125,7 +133,7 @@ impl AstCompiler {
         Ok(())
     }
 
-    fn indent(&mut self) -> Result<Option<Statement>, CompilerError> {
+    fn indent(&mut self) -> Result<Option<Statement>, CompilerErrorAtLine> {
         let expected_indent = *self.indent.last().unwrap();
         // skip empty lines
         while self.check(Eol) {
@@ -138,9 +146,9 @@ impl AstCompiler {
             indent_on_line += 1;
         }
         if indent_on_line > expected_indent {
-            Err(UnexpectedIndent(
+            Err(self.raise(UnexpectedIndent(
                 indent_on_line, expected_indent
-            ))
+            )))
         } else if indent_on_line < expected_indent {
             self.indent.pop();
             return Ok(None);
@@ -149,7 +157,7 @@ impl AstCompiler {
         }
     }
 
-    fn declaration(&mut self) -> Result<Statement, CompilerError> {
+    fn declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
         if self.match_token(vec![Fn]) {
             self.function_declaration()
         } else if self.match_token(vec![Let]) {
@@ -161,7 +169,7 @@ impl AstCompiler {
         }
     }
 
-    fn object_declaration(&mut self) -> Result<Statement, CompilerError> {
+    fn object_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
         let type_name = self.consume(Identifier, Expected("object name."))?;
         self.consume(Colon, Expected("':' after object name."))?;
         self.consume(Eol, Expected("end of line."))?;
@@ -186,7 +194,7 @@ impl AstCompiler {
                 if field_type.is_type() {
                     self.advance();
                 } else {
-                    Err(Expected("a type"))?
+                    Err(self.raise(Expected("a type")))?
                 }
                 fields.push(Parameter {
                     name: field_name,
@@ -201,7 +209,7 @@ impl AstCompiler {
         })
     }
 
-    fn function_declaration(&mut self) -> Result<Statement, CompilerError> {
+    fn function_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
         let name_token = self.consume(Identifier, Expected("function name."))?;
         self.consume(LeftParen, Expected("'(' after function name."))?;
         while !self.check(RightParen) {
@@ -227,9 +235,9 @@ impl AstCompiler {
         Ok(function_stmt)
     }
 
-    fn let_declaration(&mut self) -> Result<Statement, CompilerError> {
+    fn let_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
         if self.peek().token_type.is_type(){
-            return Err(CompilerError::KeywordNotAllowedAsIdentifier(self.peek().token_type))
+            return Err(self.raise(CompilerError::KeywordNotAllowedAsIdentifier(self.peek().token_type)))
         }
         let name_token = self.consume(Identifier, Expected("variable name."))?;
 
@@ -249,7 +257,7 @@ impl AstCompiler {
                 Ok(var_type) => var_type,
                 Err(e) => {
                     self.had_error = true;
-                    return Err(TypeError(name_token.line, Box::new(e)));
+                    return Err(self.raise(TypeError(Box::new(e))));
                 }
             };
             self.vars.push(Expression::Variable {
@@ -263,11 +271,11 @@ impl AstCompiler {
                 initializer,
             })
         } else {
-            Err(UninitializedVariable)?
+            Err(self.raise(UninitializedVariable))?
         }
     }
 
-    fn statement(&mut self) -> Result<Statement, CompilerError> {
+    fn statement(&mut self) -> Result<Statement, CompilerErrorAtLine> {
         if self.match_token(vec![Print]) {
             self.print_statement()
         } else {
@@ -275,68 +283,68 @@ impl AstCompiler {
         }
     }
 
-    fn print_statement(&mut self) -> Result<Statement, CompilerError> {
+    fn print_statement(&mut self) -> Result<Statement, CompilerErrorAtLine> {
         let expr = self.expression()?;
         self.consume(Eol, Expected("end of line after print statement."))?;
         Ok(Statement::PrintStmt { value: expr })
     }
 
-    fn expr_statement(&mut self) -> Result<Statement, CompilerError> {
+    fn expr_statement(&mut self) -> Result<Statement, CompilerErrorAtLine> {
         let expr = self.expression()?;
         self.consume(Eol, Expected("end of line after expression."))?;
         Ok(Statement::ExpressionStmt { expression: expr })
     }
 
-    fn expression(&mut self) -> Result<Expression, CompilerError> {
+    fn expression(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         self.or()
     }
 
-    fn or(&mut self) -> Result<Expression, CompilerError> {
+    fn or(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.and()?;
         self.binary(vec![TokenType::LogicalOr], expr)
     }
 
-    fn and(&mut self) -> Result<Expression, CompilerError> {
+    fn and(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.bit_and()?;
         self.binary(vec![TokenType::LogicalAnd], expr)
     }
 
-    fn bit_and(&mut self) -> Result<Expression, CompilerError> {
+    fn bit_and(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.bit_or()?;
         self.binary(vec![TokenType::BitAnd], expr)
     }
 
-    fn bit_or(&mut self) -> Result<Expression, CompilerError> {
+    fn bit_or(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.bit_xor()?;
         self.binary(vec![TokenType::BitOr], expr)
     }
 
-    fn bit_xor(&mut self) -> Result<Expression, CompilerError> {
+    fn bit_xor(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.equality()?;
         self.binary(vec![TokenType::BitXor], expr)
     }
 
-    fn equality(&mut self) -> Result<Expression, CompilerError> {
+    fn equality(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.comparison()?;
         self.binary(vec![TokenType::EqualEqual, TokenType::BangEqual], expr)
     }
 
-    fn comparison(&mut self) -> Result<Expression, CompilerError> {
+    fn comparison(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.bitshift()?;
         self.binary(vec![Greater, GreaterEqual, Less, LessEqual], expr)
     }
 
-    fn bitshift(&mut self) -> Result<Expression, CompilerError> {
+    fn bitshift(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.term()?;
         self.binary(vec![GreaterGreater, LessLess], expr)
     }
 
-    fn term(&mut self) -> Result<Expression, CompilerError> {
+    fn term(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.factor()?;
         self.binary(vec![Minus, Plus], expr)
     }
 
-    fn factor(&mut self) -> Result<Expression, CompilerError> {
+    fn factor(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.unary()?;
         self.binary(vec![Slash, Star], expr)
     }
@@ -345,7 +353,7 @@ impl AstCompiler {
         &mut self,
         types: Vec<TokenType>,
         mut expr: Expression,
-    ) -> Result<Expression, CompilerError> {
+    ) -> Result<Expression, CompilerErrorAtLine> {
         while self.match_token(types.clone()) {
             let operator = self.previous().clone();
             let right = self.comparison()?;
@@ -359,7 +367,7 @@ impl AstCompiler {
         Ok(expr)
     }
 
-    fn unary(&mut self) -> Result<Expression, CompilerError> {
+    fn unary(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         if self.match_token(vec![Bang, Minus]) {
             let operator = self.previous().clone();
             let right = self.unary()?;
@@ -373,7 +381,7 @@ impl AstCompiler {
         }
     }
 
-    fn primary(&mut self) -> Result<Expression, CompilerError> {
+    fn primary(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         debug!("primary {:?}", self.peek());
         Ok(if self.match_token(vec![LeftBracket]) {
             self.list()?
@@ -395,13 +403,13 @@ impl AstCompiler {
             Expression::Literal {
                 line: self.peek().line,
                 literaltype: Integer,
-                value: Value::I64(self.previous().lexeme.parse().map_err(|e|ParseError(format!("{:?}",e)))?),
+                value: Value::I64(self.previous().lexeme.parse().map_err(|e|self.raise(ParseError(format!("{:?}",e))))?),
             }
         } else if self.match_token(vec![FloatingPoint]) {
             Expression::Literal {
                 line: self.peek().line,
                 literaltype: FloatingPoint,
-                value: Value::F64(self.previous().lexeme.parse().map_err(|e|ParseError(format!("{:?}",e)))?),
+                value: Value::F64(self.previous().lexeme.parse().map_err(|e|self.raise(ParseError(format!("{:?}",e))))?),
             }
         } else if self.match_token(vec![StringType]) {
             Expression::Literal {
@@ -433,7 +441,7 @@ impl AstCompiler {
         })
     }
 
-    fn list(&mut self) -> Result<Expression, CompilerError> {
+    fn list(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let mut list = vec![];
         while !self.match_token(vec![RightBracket]) {
             list.push(self.expression()?);
@@ -451,7 +459,7 @@ impl AstCompiler {
         })
     }
 
-    fn map(&mut self) -> Result<Expression, CompilerError> {
+    fn map(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let mut entries = vec![];
         while !self.match_token(vec![RightBrace]) {
             let key = self.expression()?;
@@ -472,7 +480,7 @@ impl AstCompiler {
         })
     }
 
-    fn variable_lookup(&mut self, token: &Token) -> Result<Expression, CompilerError> {
+    fn variable_lookup(&mut self, token: &Token) -> Result<Expression, CompilerErrorAtLine> {
         let (var_name, var_type) = self
             .vars
             .iter()
@@ -484,7 +492,7 @@ impl AstCompiler {
                 }
             })
             .find(|e| e.0 == &token.lexeme)
-            .ok_or_else(|| return CompilerError::UndeclaredVariable(token.clone()))?;
+            .ok_or_else(|| return self.raise(CompilerError::UndeclaredVariable(token.clone())))?;
         Ok(Expression::Variable {
             name: var_name.to_string(),
             var_type: var_type.clone(),
@@ -492,22 +500,22 @@ impl AstCompiler {
         })
     }
 
-    fn function_call(&mut self, name: String) -> Result<Expression, CompilerError> {
+    fn function_call(&mut self, name: String) -> Result<Expression, CompilerErrorAtLine> {
         let function_name = self.functions.get(&name).unwrap().name.lexeme.clone();
         let function = self.functions.get(&function_name).unwrap().clone();
 
         let mut arguments = vec![];
         while !self.match_token(vec![RightParen]) {
             if arguments.len() >= 25 {
-                return Err(TooManyParameters);
+                return Err(self.raise(TooManyParameters));
             }
             let arg = self.expression()?;
             let arg_type = arg.infer_type();
             if arg_type != function.parameters[arguments.len()].var_type {
-                return Err(IncompatibleTypes(
+                return Err(self.raise(IncompatibleTypes(
                     function.parameters[arguments.len()].var_type,
                     arg_type
-                ));
+                )));
             }
             arguments.push(arg);
             if self.peek().token_type == TokenType::Comma {
@@ -526,7 +534,7 @@ impl AstCompiler {
         })
     }
 
-    fn consume(&mut self, token_type: TokenType, message: CompilerError) -> Result<Token, CompilerError> {
+    fn consume(&mut self, token_type: TokenType, message: CompilerError) -> Result<Token, CompilerErrorAtLine> {
         if self.check(token_type) {
             self.advance();
         } else {
@@ -536,7 +544,7 @@ impl AstCompiler {
             //     message.to_string(),
             //     self.peek()
             // ));
-            return Err(message);
+            return Err(self.raise(message));
         }
         Ok(self.previous().clone())
     }
@@ -576,6 +584,10 @@ impl AstCompiler {
 
     fn is_at_end(&self) -> bool {
         self.peek().token_type == Eof
+    }
+
+    fn current_line(&self) -> usize {
+        self.peek().line
     }
 }
 

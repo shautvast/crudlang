@@ -6,20 +6,6 @@ use std::collections::HashMap;
 use tracing::debug;
 use crate::tokens::TokenType;
 
-macro_rules! define_var {
-    ($self:ident, $variant:ident, $chunk:ident) => {{
-        let name = $self.read_name($chunk);
-        let value = $self.pop();
-        if let Value::$variant(_) = value {
-            $self.local_vars.insert(name, value);
-        } else {
-            return Err(RuntimeError::Expected(
-                 stringify!($variant), stringify!(value),
-            ));
-        }
-    }};
-}
-
 pub struct Vm<'a> {
     ip: usize,
     stack: Vec<Value>,
