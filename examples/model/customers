@@ -1,4 +1,4 @@
-struct Customer:
+object Customer:
    id: u32,
    first_name: string,
    last_name: string,

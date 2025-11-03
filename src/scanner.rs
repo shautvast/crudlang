@@ -58,6 +58,7 @@ impl Scanner {
                     };
                     self.add_token(t);
                 }
+                '#' => self.add_token(TokenType::Hash),
                 '+' => self.add_token(TokenType::Plus),
                 ':' => self.add_token(TokenType::Colon),
                 ';' => println!("Warning: Ignoring semicolon at line {}", self.line),

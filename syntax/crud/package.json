@@ -1,0 +1,32 @@
+{
+  "name": "crud",
+  "displayName": "crud",
+  "description": "crud-lang",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "crud",
+      "aliases": ["crud-lang", "crud"],
+      "extensions": [".crud"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "crud",
+      "scopeName": "source.crud",
+      "path": "./syntaxes/crud.tmLanguage.json"
+    }],
+    "semanticTokenScopes": [
+      {
+        "scopes": {
+          "crud.custom.scope": ["annotation.crud"]
+        }
+      }
+    ]
+  }
+}

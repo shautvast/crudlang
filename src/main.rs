@@ -1,15 +1,16 @@
-use axum::extract::{State};
+use axum::extract::{Request, State};
 use axum::http::StatusCode;
-use axum::routing::get;
+use axum::routing::{any, get};
 use axum::{Json, Router};
 use crudlang::ast_compiler;
 use crudlang::bytecode_compiler::compile;
 use crudlang::chunk::Chunk;
 use crudlang::scanner::scan;
-use crudlang::vm::{interpret, interpret_async};
+use crudlang::vm::{interpret_async};
 use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
+use axum::response::IntoResponse;
 use walkdir::WalkDir;
 use crudlang::errors::Error;
 use crudlang::errors::Error::Platform;
@@ -46,28 +47,40 @@ async fn main() -> Result<(), crudlang::errors::Error> {
     }
 
     let registry = Arc::new(registry);
-    if !paths.is_empty() {
-        let mut app = Router::new();
-        for (path, code) in paths.iter() {
-            let state = Arc::new(AppState {
-                name: format!("{}.get", path),
-                registry: registry.clone(),
-            });
-            println!("adding {}", path);
-            app = app.route(
-                &format!("/{}", path.replace("/web", "")),
-                get(handle_get).with_state(state.clone()),
-            );
-        }
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.map_err(map_underlying())?;
-        println!("listening on {}", listener.local_addr().map_err(map_underlying())?);
-        axum::serve(listener, app).await.map_err(map_underlying())?;
-    }
+    // if !paths.is_empty() {
+    //     let mut app = Router::new();
+    //     for (path, code) in paths.iter() {
+    //         let state = Arc::new(AppState {
+    //             name: format!("{}.get", path),
+    //             registry: registry.clone(),
+    //         });
+    //         println!("adding {}", path);
+    //         app = app.route(
+    //             &format!("/{}", path.replace("/web", "")),
+    //             get(handle_get).with_state(state.clone()),
+    //         );
+    //     }
+    //     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.map_err(map_underlying())?;
+    //     println!("listening on {}", listener.local_addr().map_err(map_underlying())?);
+    //     axum::serve(listener, app).await.map_err(map_underlying())?;
+    // }
+
+    let app = Router::new()
+        .route("/", any(handle_any))
+        .route("/{*path}", any(handle_any));
+
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+        .await
+        .map_err(map_underlying())?;
+
+    println!("listening on {}", listener.local_addr().map_err(map_underlying())?);
+
+    axum::serve(listener, app).await.map_err(map_underlying())?;
     Ok(())
 }
 
 fn map_underlying() -> fn(std::io::Error) -> Error {
-    |e| Error::Platform(e.to_string())
+    |e| Platform(e.to_string())
 }
 
 #[derive(Clone)]
@@ -85,3 +98,28 @@ async fn handle_get(State(state): State<Arc<AppState>>) -> Result<Json<String>, 
     ))
 }
 
+
+async fn handle_any(req: Request) -> impl IntoResponse {
+    let method = req.method().clone();
+    let uri = req.uri();
+
+    // Parse path segments
+    let path_segments: Vec<&str> = uri.path()
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    // Parse query parameters
+    let query_params: HashMap<String, String> = uri.query()
+        .map(|q| {
+            url::form_urlencoded::parse(q.as_bytes())
+                .into_owned()
+                .collect()
+        })
+        .unwrap_or_default();
+
+    format!(
+        "Method: {}\nPath: {}\nSegments: {:?}\nQuery: {:?}",
+        method, uri.path(), path_segments, query_params
+    )
+}

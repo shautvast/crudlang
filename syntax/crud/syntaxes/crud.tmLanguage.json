@@ -1,0 +1,95 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "crud-lang",
+  "patterns": [
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#operators"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#chars"
+    }
+  ],
+  "repository": {
+    "keywords": {
+      "patterns": [
+        {
+          "name": "variable.other.crud",
+          "match": "(#.+?\\(.*?\\))"
+        },
+        {
+          "name": "keyword.control.crud",
+          "match": "\\b(fn)\\b"
+        },
+        {
+          "name": "storage.type.crud",
+          "match": "\\b(u32|u64|i32|i64\f32|f64|string|date|char|list|map|bool)\\b"
+        },
+        {
+          "name": "support.function.crud",
+          "match": "\\b(get|put|post|delete|patch|options)\\b"
+        },
+        {
+          "name": "constant.numeric.crud",
+          "match": "\\b[0-9]+\\.?[0-9]*\\b"
+        },
+        {
+          "name": "constant.language.crud",
+          "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "constant.character.escape.crud",
+          "match": "\\\\[nrt\\\\'\"]"
+        },
+        {
+          "name": "comment.line.crud",
+          "match": "(//.*)"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arithmetic.crud",
+          "match": "\\+|\\-|\\*|\\/"
+        },
+        {
+          "name": "keyword.operator.comparison.crud",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.assignment.crud",
+          "match": "="
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.crud",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.crud",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "chars": {
+      "name": "string.quoted.single.crud",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape.crud",
+          "match": "\\\\."
+        }
+      ]
+    }
+  },
+  "scopeName": "source.crud"
+}
