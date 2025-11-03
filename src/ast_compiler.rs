@@ -1,3 +1,4 @@
+use crate::ast_compiler::Expression::Variable;
 use crate::errors::CompilerError::{
     self, Expected, IncompatibleTypes, ParseError, TooManyParameters, TypeError, UnexpectedIndent,
     UninitializedVariable,
@@ -15,8 +16,11 @@ use crate::value::Value;
 use log::debug;
 use std::collections::HashMap;
 
-pub fn compile(tokens: Vec<Token>) -> Result<Vec<Statement>, CompilerErrorAtLine> {
-    let mut compiler = AstCompiler::new(tokens);
+pub fn compile(
+    path: Option<&str>,
+    tokens: Vec<Token>,
+) -> Result<Vec<Statement>, CompilerErrorAtLine> {
+    let mut compiler = AstCompiler::new(path.unwrap_or(""), tokens);
     compiler.compile_tokens()
 }
 
@@ -38,7 +42,7 @@ struct AstCompiler {
 }
 
 impl AstCompiler {
-    fn new(tokens: Vec<Token>) -> Self {
+    fn new(_name: &str, tokens: Vec<Token>) -> Self {
         Self {
             tokens,
             current: 0,
@@ -514,7 +518,7 @@ impl AstCompiler {
             .vars
             .iter()
             .filter_map(|e| {
-                if let Expression::Variable { name, var_type, .. } = e {
+                if let Variable { name, var_type, .. } = e {
                     Some((name, var_type))
                 } else {
                     None
@@ -522,7 +526,7 @@ impl AstCompiler {
             })
             .find(|e| e.0 == &token.lexeme)
             .ok_or_else(|| return self.raise(CompilerError::UndeclaredVariable(token.clone())))?;
-        Ok(Expression::Variable {
+        Ok(Variable {
             name: var_name.to_string(),
             var_type: var_type.clone(),
             line: token.line,

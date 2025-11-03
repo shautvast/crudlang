@@ -12,11 +12,11 @@ use crate::vm::{
 use std::collections::HashMap;
 
 pub fn compile(
-    namespace: Option<&str>,
+    qualified_name: Option<&str>,
     ast: &Vec<Statement>,
     registry: &mut HashMap<String, Chunk>,
 ) -> Result<(), CompilerErrorAtLine> {
-    compile_in_namespace(ast, namespace, registry)
+    compile_in_namespace(ast, qualified_name, registry)
 }
 
 pub(crate) fn compile_function(
@@ -24,7 +24,16 @@ pub(crate) fn compile_function(
     registry: &mut HashMap<String, Chunk>,
     namespace: &str,
 ) -> Result<Chunk, CompilerErrorAtLine> {
-    let mut compiler = Compiler::new(&function.name.lexeme);
+    let fn_name = &function.name.lexeme;
+    let mut compiler = Compiler::new(fn_name);
+    if is_http_method(fn_name) {
+        compiler.chunk.add_var(&TokenType::StringType, "path");
+        compiler.chunk.add_var(&TokenType::MapType, "query");
+        compiler.chunk.add_var(&TokenType::MapType, "headers");
+        compiler.vars.insert("path".to_string(), 0);
+        compiler.vars.insert("query".to_string(), 1);
+        compiler.vars.insert("headers".to_string(), 2);
+    }
     for parm in &function.parameters {
         let name = parm.name.lexeme.clone();
         let var_index = compiler.chunk.add_var(&parm.var_type, &parm.name.lexeme);
@@ -33,6 +42,10 @@ pub(crate) fn compile_function(
     }
 
     Ok(compiler.compile(&function.body, registry, namespace)?)
+}
+
+fn is_http_method(name: &str) -> bool {
+    vec!["get", "post", "put", "delete", "patch"].contains(&name)
 }
 
 pub(crate) fn compile_in_namespace(
@@ -110,7 +123,6 @@ impl Compiler {
             }
             Statement::FunctionStmt { function } => {
                 let function_name = function.name.lexeme.clone();
-                // self.emit_constant(Value::String(function_name.clone()));
                 let compiled_function = compile_function(function, registry, namespace)?;
                 registry.insert(
                     format!("{}.{}", self.chunk.name, function_name),

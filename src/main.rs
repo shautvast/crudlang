@@ -37,7 +37,7 @@ async fn main() -> Result<(), crudlang::errors::Error> {
         axum::serve(listener, app).await.map_err(map_underlying())?;
         Ok(())
     } else {
-        Err(Platform("No source files found".to_string()))
+        Err(Platform("No source files found or compilation error".to_string()))
     }
 }
 
@@ -54,17 +54,22 @@ async fn handle_any(
     let uri = req.uri();
 
     // // todo value = Vec<String>
-    // let query_params: HashMap<String, String> = uri
-    //     .query()
-    //     .map(|q| {
-    //         url::form_urlencoded::parse(q.as_bytes())
-    //             .into_owned()
-    //             .collect()
-    //     })
-    //     .unwrap_or_default();
+    let query_params: HashMap<String, String> = uri
+        .query()
+        .map(|q| {
+            url::form_urlencoded::parse(q.as_bytes())
+                .into_owned()
+                .collect()
+        })
+        .unwrap_or_default();
     let component = format!("{}/web.{}", &uri.path()[1..], method);
+
+    let mut headers = HashMap::new();
+    for (k,v) in req.headers().iter(){
+        headers.insert(k.to_string(), v.to_str().unwrap().to_string());
+    }
     Ok(Json(
-        interpret_async(&state.registry, &component, req)
+        interpret_async(&state.registry, &component, &req.uri().to_string(), query_params, headers)
             .await
             .unwrap()
             .to_string(),

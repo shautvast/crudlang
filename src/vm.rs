@@ -3,8 +3,8 @@ use crate::errors::RuntimeError::Something;
 use crate::errors::{RuntimeError, ValueError};
 use crate::tokens::TokenType;
 use crate::value::Value;
+use axum::http::{Uri};
 use std::collections::HashMap;
-use axum::extract::Request;
 use tracing::debug;
 
 pub struct Vm<'a> {
@@ -34,7 +34,9 @@ pub fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> Result<Va
 pub async fn interpret_async(
     registry: &HashMap<String, Chunk>,
     function: &str,
-    _request: Request,
+    uri: &str,
+    query_params: HashMap<String, String>,
+    headers: HashMap<String, String>,
 ) -> Result<Value, RuntimeError> {
     //TODO convert request to arguments
     let chunk = registry.get(function);
@@ -46,10 +48,23 @@ pub async fn interpret_async(
             error_occurred: false,
             registry,
         };
+        vm.local_vars
+            .insert("path".to_string(), Value::String(uri.into()));
+        vm.local_vars
+            .insert("query".to_string(), Value::Map(value_map(query_params)));
+        vm.local_vars
+            .insert("headers".to_string(), Value::Map(value_map(headers)));
         vm.run(&chunk)
     } else {
         Err(RuntimeError::FunctionNotFound(function.to_string()))
     }
+}
+
+fn value_map(strings: HashMap<String, String>) -> HashMap<Value, Value> {
+    strings
+        .into_iter()
+        .map(|(k, v)| (Value::String(k.to_string()), Value::String(v.to_string())))
+        .collect()
 }
 
 pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
