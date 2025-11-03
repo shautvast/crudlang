@@ -19,8 +19,7 @@ mod value;
 pub mod vm;
 pub mod errors;
 
-pub fn compile_sourcedir(source_dir:&str)-> Result<(Vec<String>, HashMap<String,Chunk>), Error>{
-    let mut paths = vec![];
+pub fn compile_sourcedir(source_dir:&str)-> Result<HashMap<String,Chunk>, Error>{
     let mut registry = HashMap::new();
 
     for entry in WalkDir::new(source_dir).into_iter().filter_map(|e| e.ok()) {
@@ -36,7 +35,6 @@ pub fn compile_sourcedir(source_dir:&str)-> Result<(Vec<String>, HashMap<String,
                         .unwrap()
                         .replace(".crud", "");
                     bytecode_compiler::compile(Some(&path), &statements, &mut registry)?;
-                    paths.push(path);
                 }
                 Err(e) => {
                     println!("{}", e);
@@ -46,7 +44,7 @@ pub fn compile_sourcedir(source_dir:&str)-> Result<(Vec<String>, HashMap<String,
             println!();
         }
     }
-    Ok((paths,registry))
+    Ok(registry)
 }
 
 pub fn map_underlying() -> fn(std::io::Error) -> Error {

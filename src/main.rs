@@ -13,10 +13,10 @@ use std::sync::Arc;
 async fn main() -> Result<(), crudlang::errors::Error> {
     tracing_subscriber::fmt::init();
 
-    let (paths,registry) = compile_sourcedir("source")?;
+    let registry = compile_sourcedir("source")?;
 
     let registry = Arc::new(registry);
-    if !paths.is_empty() {
+    if !registry.is_empty() {
         let state = Arc::new(AppState {
             registry: registry.clone(),
         });
