@@ -61,6 +61,8 @@ pub enum CompilerError {
     UnexpectedType(TokenType),
     #[error("'{0}' is a keyword. You cannot use it as an identifier")]
     KeywordNotAllowedAsIdentifier(TokenType),
+    #[error("Crud does not support numbers above 2^64")]
+    Overflow,
 }
 
 #[derive(Error, Debug, PartialEq)]

@@ -1,16 +1,19 @@
-use crate::errors::CompilerError::{self, Expected, IncompatibleTypes, ParseError, TooManyParameters, TypeError, UnexpectedIndent, UninitializedVariable};
+use crate::errors::CompilerError::{
+    self, Expected, IncompatibleTypes, ParseError, TooManyParameters, TypeError, UnexpectedIndent,
+    UninitializedVariable,
+};
+use crate::errors::CompilerErrorAtLine;
 use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, Date, Eof, Eol, Equal, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater,
-    Identifier, Indent, Integer, LeftBrace, LeftBracket, LeftParen, Less, LessEqual, LessLess,
-    Let, ListType, MapType, Minus, Object, Plus, Print, RightBrace, RightBracket, RightParen, SignedInteger,
-    SingleRightArrow, Slash, Star, StringType, True, UnsignedInteger, F32, F64,
-    I32, I64, U32, U64,
+    Bang, Bool, Char, Colon, Date, Eof, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater,
+    GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace, LeftBracket,
+    LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print,
+    RightBrace, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star, StringType,
+    True, U32, U64, UnsignedInteger,
 };
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use log::debug;
 use std::collections::HashMap;
-use crate::errors::CompilerErrorAtLine;
 
 pub fn compile(tokens: Vec<Token>) -> Result<Vec<Statement>, CompilerErrorAtLine> {
     let mut compiler = AstCompiler::new(tokens);
@@ -50,13 +53,11 @@ impl AstCompiler {
         self.current = 0;
     }
 
-    fn compile_tokens(&mut self) -> Result<Vec<Statement>,CompilerErrorAtLine> {
+    fn compile_tokens(&mut self) -> Result<Vec<Statement>, CompilerErrorAtLine> {
         self.collect_functions()?;
         self.reset();
         self.compile()
     }
-
-
 
     fn compile(&mut self) -> Result<Vec<Statement>, CompilerErrorAtLine> {
         self.current_line();
@@ -146,9 +147,7 @@ impl AstCompiler {
             indent_on_line += 1;
         }
         if indent_on_line > expected_indent {
-            Err(self.raise(UnexpectedIndent(
-                indent_on_line, expected_indent
-            )))
+            Err(self.raise(UnexpectedIndent(indent_on_line, expected_indent)))
         } else if indent_on_line < expected_indent {
             self.indent.pop();
             return Ok(None);
@@ -236,8 +235,10 @@ impl AstCompiler {
     }
 
     fn let_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
-        if self.peek().token_type.is_type(){
-            return Err(self.raise(CompilerError::KeywordNotAllowedAsIdentifier(self.peek().token_type)))
+        if self.peek().token_type.is_type() {
+            return Err(self.raise(CompilerError::KeywordNotAllowedAsIdentifier(
+                self.peek().token_type,
+            )));
         }
         let name_token = self.consume(Identifier, Expected("variable name."))?;
 
@@ -403,13 +404,41 @@ impl AstCompiler {
             Expression::Literal {
                 line: self.peek().line,
                 literaltype: Integer,
-                value: Value::I64(self.previous().lexeme.parse().map_err(|e|self.raise(ParseError(format!("{:?}",e))))?),
+                value: Value::I64(
+                    self.previous()
+                        .lexeme
+                        .parse()
+                        .map_err(|e| self.raise(ParseError(format!("{:?}", e))))?,
+                ),
+            }
+        } else if self.match_token(vec![U32]) {
+            Expression::Literal {
+                line: self.peek().line,
+                literaltype: Integer,
+                value: Value::U32(
+                    u32::from_str_radix(&self.previous().lexeme.trim_start_matches("0x"), 16)
+                        .map_err(|e| self.raise(ParseError(format!("{:?}", e))))?,
+                ),
+            }
+        } else if self.match_token(vec![U64]) {
+            Expression::Literal {
+                line: self.peek().line,
+                literaltype: Integer,
+                value: Value::U64(
+                    u64::from_str_radix(&self.previous().lexeme.trim_start_matches("0x"), 16)
+                        .map_err(|e| self.raise(ParseError(format!("{:?}", e))))?,
+                ),
             }
         } else if self.match_token(vec![FloatingPoint]) {
             Expression::Literal {
                 line: self.peek().line,
                 literaltype: FloatingPoint,
-                value: Value::F64(self.previous().lexeme.parse().map_err(|e|self.raise(ParseError(format!("{:?}",e))))?),
+                value: Value::F64(
+                    self.previous()
+                        .lexeme
+                        .parse()
+                        .map_err(|e| self.raise(ParseError(format!("{:?}", e))))?,
+                ),
             }
         } else if self.match_token(vec![StringType]) {
             Expression::Literal {
@@ -514,7 +543,7 @@ impl AstCompiler {
             if arg_type != function.parameters[arguments.len()].var_type {
                 return Err(self.raise(IncompatibleTypes(
                     function.parameters[arguments.len()].var_type,
-                    arg_type
+                    arg_type,
                 )));
             }
             arguments.push(arg);
@@ -534,7 +563,11 @@ impl AstCompiler {
         })
     }
 
-    fn consume(&mut self, token_type: TokenType, message: CompilerError) -> Result<Token, CompilerErrorAtLine> {
+    fn consume(
+        &mut self,
+        token_type: TokenType,
+        message: CompilerError,
+    ) -> Result<Token, CompilerErrorAtLine> {
         if self.check(token_type) {
             self.advance();
         } else {
@@ -610,10 +643,7 @@ fn calculate_type(
                 (U64, I32) => U64,
                 (StringType, _) => StringType, // meh, this all needs rigorous testing. Update: this is in progress
                 _ => {
-                    return Err(IncompatibleTypes(
-                        declared_type,
-                        inferred_type
-                    ));
+                    return Err(IncompatibleTypes(declared_type, inferred_type));
                 }
             }
         } else {

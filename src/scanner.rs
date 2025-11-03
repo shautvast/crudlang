@@ -1,4 +1,6 @@
-use crate::tokens::TokenType::{BitXor, FloatingPoint, Integer};
+use crate::errors::CompilerError::{IllegalCharLength, UnexpectedIdentifier, Unterminated};
+use crate::errors::{CompilerError, CompilerErrorAtLine};
+use crate::tokens::TokenType::{BitXor, FloatingPoint, Integer, U32, U64};
 use crate::{
     keywords,
     tokens::{
@@ -6,8 +8,6 @@ use crate::{
         TokenType::{self},
     },
 };
-use crate::errors::{CompilerError, CompilerErrorAtLine};
-use crate::errors::CompilerError::{IllegalCharLength, UnexpectedIdentifier, Unterminated};
 
 pub fn scan(source: &str) -> Result<Vec<Token>, CompilerErrorAtLine> {
     let scanner = Scanner {
@@ -32,7 +32,7 @@ impl Scanner {
         Ok(self.tokens)
     }
 
-    fn scan_token(&mut self) -> Result<(),CompilerErrorAtLine> {
+    fn scan_token(&mut self) -> Result<(), CompilerErrorAtLine> {
         let c = self.advance();
         if self.new_line && (c == ' ' || c == '\t') {
             self.add_token(TokenType::Indent);
@@ -135,7 +135,9 @@ impl Scanner {
                 }
                 '^' => self.add_token(BitXor),
                 _ => {
-                    if is_digit(c) {
+                    if c == '0' && self.peek() == 'x' {
+                        self.hex_number()?;
+                    } else if is_digit(c) {
                         self.number();
                     } else if is_alpha(c) {
                         self.identifier();
@@ -158,8 +160,25 @@ impl Scanner {
         self.add_token_with_value(tokentype, value);
     }
 
+    fn hex_number(&mut self) -> Result<(), CompilerErrorAtLine> {
+        self.advance();
+        self.advance();
+        while is_digit(self.peek()) || is_alpha(self.peek()) {
+            self.advance();
+        }
+        let value: String = self.chars[self.start..self.current].iter().collect();
+        if value.len() < 5 {
+            self.add_token_with_value(U32, value);
+        } else if value.len() < 9 {
+            self.add_token_with_value(U64, value);
+        } else {
+            return Err(self.raise(CompilerError::Overflow));
+        }
+        Ok(())
+    }
+
     fn number(&mut self) {
-        while is_digit(self.peek() ) {
+        while is_digit(self.peek()) {
             self.advance();
         }
         let mut has_dot = false;
@@ -181,7 +200,7 @@ impl Scanner {
         }
 
         if self.is_at_end() {
-            return Err(CompilerErrorAtLine::raise(Unterminated("char"), self.line))
+            return Err(CompilerErrorAtLine::raise(Unterminated("char"), self.line));
         }
 
         self.advance();
@@ -200,7 +219,7 @@ impl Scanner {
         CompilerErrorAtLine::raise(error, self.line)
     }
 
-    fn string(&mut self) -> Result<(),CompilerErrorAtLine> {
+    fn string(&mut self) -> Result<(), CompilerErrorAtLine> {
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -276,7 +295,7 @@ fn is_digit(c: char) -> bool {
 }
 
 fn is_digit_or_scientific(c: char) -> bool {
-    is_digit(c) || c=='e' || c=='E'
+    is_digit(c) || c == 'e' || c == 'E'
 }
 
 fn is_alphanumeric(c: char) -> bool {
