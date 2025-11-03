@@ -1,0 +1,21 @@
+fn get():
+    #path(/) -> list:
+        service.get_all()
+
+    #path(/id/{uuid}) -> Customer?:
+        service.get(uuid)?
+
+    #path(?firstname={fname} | lastname={lname}) -> Customer?:
+        if name:
+            service.get_by_firstname(fname)?
+        else if lastname:
+            service.get_by_lastname(lname)?
+        else:
+            404
+
+fn post(customer: Customer):
+    service.add(customer)
+
+
+fn put(customer: Customer):
+    service.update(customer)

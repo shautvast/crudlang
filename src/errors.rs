@@ -71,6 +71,8 @@ pub enum RuntimeError {
     Something,
     #[error("Expected {0}, got {1}")]
     Expected(&'static str, &'static str),
+    #[error("Function {0} not found")]
+    FunctionNotFound(String),
 }
 
 #[derive(Error, Debug, PartialEq)]

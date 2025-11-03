@@ -2,7 +2,11 @@ use crate::scanner::scan;
 use crate::value::Value;
 use crate::vm::interpret;
 use std::collections::HashMap;
+use std::fs;
+use walkdir::WalkDir;
+use crate::chunk::Chunk;
 use crate::errors::Error;
+use crate::errors::Error::Platform;
 
 pub mod ast_compiler;
 pub mod bytecode_compiler;
@@ -14,6 +18,40 @@ mod tokens;
 mod value;
 pub mod vm;
 pub mod errors;
+
+pub fn compile_sourcedir(source_dir:&str)-> Result<(Vec<String>, HashMap<String,Chunk>), Error>{
+    let mut paths = vec![];
+    let mut registry = HashMap::new();
+
+    for entry in WalkDir::new(source_dir).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path().to_str().unwrap();
+        if path.ends_with(".crud") {
+            print!("compiling {:?}: ", path);
+            let source = fs::read_to_string(path).map_err(map_underlying())?;
+            let tokens = scan(&source)?;
+            match ast_compiler::compile(tokens) {
+                Ok(statements) => {
+                    let path = path
+                        .strip_prefix("source/")
+                        .unwrap()
+                        .replace(".crud", "");
+                    bytecode_compiler::compile(Some(&path), &statements, &mut registry)?;
+                    paths.push(path);
+                }
+                Err(e) => {
+                    println!("{}", e);
+                    break;
+                }
+            }
+            println!();
+        }
+    }
+    Ok((paths,registry))
+}
+
+pub fn map_underlying() -> fn(std::io::Error) -> Error {
+    |e| Platform(e.to_string())
+}
 
 pub fn compile(src: &str) -> Result<HashMap<String, chunk::Chunk>, Error> {
     let tokens = scan(src)?;

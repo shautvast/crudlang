@@ -1,10 +1,10 @@
 use crate::chunk::Chunk;
-use crate::errors::RuntimeError::{Something};
+use crate::errors::RuntimeError::Something;
 use crate::errors::{RuntimeError, ValueError};
+use crate::tokens::TokenType;
 use crate::value::Value;
 use std::collections::HashMap;
 use tracing::debug;
-use crate::tokens::TokenType;
 
 pub struct Vm<'a> {
     ip: usize,
@@ -30,16 +30,23 @@ pub fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> Result<Va
     vm.run(&chunk)
 }
 
-pub async fn interpret_async(registry: &HashMap<String, Chunk>, function: &str) -> Result<Value, RuntimeError> {
-    let chunk = registry.get(function).unwrap().clone();
-    let mut vm = Vm {
-        ip: 0,
-        stack: vec![],
-        local_vars: HashMap::new(),
-        error_occurred: false,
-        registry,
-    };
-    vm.run(&chunk)
+pub async fn interpret_async(
+    registry: &HashMap<String, Chunk>,
+    function: &str,
+) -> Result<Value, RuntimeError> {
+    let chunk = registry.get(function);
+    if let Some(chunk) = chunk {
+        let mut vm = Vm {
+            ip: 0,
+            stack: vec![],
+            local_vars: HashMap::new(),
+            error_occurred: false,
+            registry,
+        };
+        vm.run(&chunk)
+    } else {
+        Err(RuntimeError::FunctionNotFound(function.to_string()))
+    }
 }
 
 pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
@@ -57,7 +64,7 @@ pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, Runt
 impl<'a> Vm<'a> {
     fn run_function(&mut self, chunk: &Chunk, mut args: Vec<Value>) -> Result<Value, RuntimeError> {
         // arguments -> locals
-        for (_,name) in chunk.vars.iter() {
+        for (_, name) in chunk.vars.iter() {
             self.local_vars.insert(name.clone(), args.remove(0));
         }
         self.run(&chunk)
@@ -134,11 +141,11 @@ impl<'a> Vm<'a> {
                     list.reverse();
                     self.push(Value::List(list));
                 }
-                OP_ASSIGN=>{
+                OP_ASSIGN => {
                     let index = self.read(chunk);
                     let (var_type, name) = chunk.vars.get(index).unwrap();
                     let value = self.pop();
-                    let value = match var_type{
+                    let value = match var_type {
                         TokenType::U32 => value.cast_u32()?,
                         TokenType::U64 => value.cast_u64()?,
                         TokenType::F32 => value.cast_f32()?,
@@ -159,7 +166,7 @@ impl<'a> Vm<'a> {
                 }
                 OP_GET => {
                     let var_index = self.read(chunk);
-                    let (_,name_index)= chunk.vars.get(var_index).unwrap();
+                    let (_, name_index) = chunk.vars.get(var_index).unwrap();
                     let value = self.local_vars.get(name_index).unwrap();
                     self.push(value.clone()); // not happy , take ownership, no clone
                     debug!("after get {:?}", self.stack);
@@ -173,7 +180,7 @@ impl<'a> Vm<'a> {
                         let arg = self.pop();
                         args.push(arg);
                     }
-                    // args.reverse();
+                    args.reverse();
 
                     let function_name = chunk.constants[function_name_index].to_string();
                     let function_chunk = self.registry.get(&function_name).unwrap();

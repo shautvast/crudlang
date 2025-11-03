@@ -1,125 +1,72 @@
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
-use axum::routing::{any, get};
+use axum::routing::any;
 use axum::{Json, Router};
-use crudlang::ast_compiler;
-use crudlang::bytecode_compiler::compile;
 use crudlang::chunk::Chunk;
-use crudlang::scanner::scan;
-use crudlang::vm::{interpret_async};
-use std::collections::HashMap;
-use std::fs;
-use std::sync::Arc;
-use axum::response::IntoResponse;
-use walkdir::WalkDir;
-use crudlang::errors::Error;
 use crudlang::errors::Error::Platform;
+use crudlang::vm::interpret_async;
+use crudlang::{compile_sourcedir, map_underlying};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), crudlang::errors::Error> {
     tracing_subscriber::fmt::init();
 
-    let mut paths = HashMap::new();
-    let mut registry = HashMap::new();
-    for entry in WalkDir::new("source").into_iter().filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if path.is_file() && path.ends_with("web.crud") {
-            print!("compiling {:?}: ", path);
-            let source = fs::read_to_string(path).map_err(map_underlying())?;
-            let tokens = scan(&source)?;
-            match ast_compiler::compile(tokens) {
-                Ok(statements) => {
-                    let path = path
-                        .strip_prefix("source").map_err(|e|Platform(e.to_string()))?
-                        .to_str()
-                        .unwrap()
-                        .replace(".crud", "");
-                    let chunk = compile(Some(&path), &statements, &mut registry)?;
-                    paths.insert(path, chunk);
-                }
-                Err(e) => {
-                    println!("{}", e);
-                    break;
-                }
-            }
-            println!();
-        }
-    }
+    let (paths,registry) = compile_sourcedir("source")?;
 
     let registry = Arc::new(registry);
-    // if !paths.is_empty() {
-    //     let mut app = Router::new();
-    //     for (path, code) in paths.iter() {
-    //         let state = Arc::new(AppState {
-    //             name: format!("{}.get", path),
-    //             registry: registry.clone(),
-    //         });
-    //         println!("adding {}", path);
-    //         app = app.route(
-    //             &format!("/{}", path.replace("/web", "")),
-    //             get(handle_get).with_state(state.clone()),
-    //         );
-    //     }
-    //     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.map_err(map_underlying())?;
-    //     println!("listening on {}", listener.local_addr().map_err(map_underlying())?);
-    //     axum::serve(listener, app).await.map_err(map_underlying())?;
-    // }
+    if !paths.is_empty() {
+        let state = Arc::new(AppState {
+            registry: registry.clone(),
+        });
 
-    let app = Router::new()
-        .route("/", any(handle_any))
-        .route("/{*path}", any(handle_any));
+        let app = Router::new()
+            .route("/", any(handle_any).with_state(state.clone()))
+            .route("/{*path}", any(handle_any).with_state(state.clone()));
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
-        .await
-        .map_err(map_underlying())?;
+        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+            .await
+            .map_err(map_underlying())?;
 
-    println!("listening on {}", listener.local_addr().map_err(map_underlying())?);
+        println!(
+            "listening on {}",
+            listener.local_addr().map_err(map_underlying())?
+        );
 
-    axum::serve(listener, app).await.map_err(map_underlying())?;
-    Ok(())
-}
-
-fn map_underlying() -> fn(std::io::Error) -> Error {
-    |e| Platform(e.to_string())
+        axum::serve(listener, app).await.map_err(map_underlying())?;
+        Ok(())
+    } else {
+        Err(Platform("No source files found".to_string()))
+    }
 }
 
 #[derive(Clone)]
 struct AppState {
-    name: String,
     registry: Arc<HashMap<String, Chunk>>,
 }
 
-async fn handle_get(State(state): State<Arc<AppState>>) -> Result<Json<String>, StatusCode> {
-    Ok(Json(
-        interpret_async(&state.registry, &state.name)
-            .await
-            .unwrap()
-            .to_string(),
-    ))
-}
-
-
-async fn handle_any(req: Request) -> impl IntoResponse {
-    let method = req.method().clone();
+async fn handle_any(
+    State(state): State<Arc<AppState>>,
+    req: Request,
+) -> Result<Json<String>, StatusCode> {
+    let method = req.method().to_string().to_ascii_lowercase();
     let uri = req.uri();
 
-    // Parse path segments
-    let path_segments: Vec<&str> = uri.path()
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .collect();
-
     // Parse query parameters
-    let query_params: HashMap<String, String> = uri.query()
+    let query_params: HashMap<String, String> = uri
+        .query()
         .map(|q| {
             url::form_urlencoded::parse(q.as_bytes())
                 .into_owned()
                 .collect()
         })
         .unwrap_or_default();
-
-    format!(
-        "Method: {}\nPath: {}\nSegments: {:?}\nQuery: {:?}",
-        method, uri.path(), path_segments, query_params
-    )
+    let component = format!("{}/web.{}", &uri.path()[1..], method);
+    Ok(Json(
+        interpret_async(&state.registry, &component)
+            .await
+            .unwrap()
+            .to_string(),
+    ))
 }
