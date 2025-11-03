@@ -53,18 +53,18 @@ async fn handle_any(
     let method = req.method().to_string().to_ascii_lowercase();
     let uri = req.uri();
 
-    // Parse query parameters
-    let query_params: HashMap<String, String> = uri
-        .query()
-        .map(|q| {
-            url::form_urlencoded::parse(q.as_bytes())
-                .into_owned()
-                .collect()
-        })
-        .unwrap_or_default();
+    // // todo value = Vec<String>
+    // let query_params: HashMap<String, String> = uri
+    //     .query()
+    //     .map(|q| {
+    //         url::form_urlencoded::parse(q.as_bytes())
+    //             .into_owned()
+    //             .collect()
+    //     })
+    //     .unwrap_or_default();
     let component = format!("{}/web.{}", &uri.path()[1..], method);
     Ok(Json(
-        interpret_async(&state.registry, &component)
+        interpret_async(&state.registry, &component, req)
             .await
             .unwrap()
             .to_string(),

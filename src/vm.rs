@@ -4,6 +4,7 @@ use crate::errors::{RuntimeError, ValueError};
 use crate::tokens::TokenType;
 use crate::value::Value;
 use std::collections::HashMap;
+use axum::extract::Request;
 use tracing::debug;
 
 pub struct Vm<'a> {
@@ -33,7 +34,9 @@ pub fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> Result<Va
 pub async fn interpret_async(
     registry: &HashMap<String, Chunk>,
     function: &str,
+    _request: Request,
 ) -> Result<Value, RuntimeError> {
+    //TODO convert request to arguments
     let chunk = registry.get(function);
     if let Some(chunk) = chunk {
         let mut vm = Vm {
