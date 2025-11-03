@@ -37,7 +37,9 @@ async fn main() -> Result<(), crudlang::errors::Error> {
         axum::serve(listener, app).await.map_err(map_underlying())?;
         Ok(())
     } else {
-        Err(Platform("No source files found or compilation error".to_string()))
+        Err(Platform(
+            "No source files found or compilation error".to_string(),
+        ))
     }
 }
 
@@ -62,16 +64,31 @@ async fn handle_any(
                 .collect()
         })
         .unwrap_or_default();
-    let component = format!("{}/web.{}", &uri.path()[1..], method);
+    let component = format!("{}/web", &uri.path()[1..]);
+    let function_qname = format!("{}.{}", component, method);
 
     let mut headers = HashMap::new();
-    for (k,v) in req.headers().iter(){
+    for (k, v) in req.headers().iter() {
         headers.insert(k.to_string(), v.to_str().unwrap().to_string());
     }
-    Ok(Json(
-        interpret_async(&state.registry, &component, &req.uri().to_string(), query_params, headers)
-            .await
-            .unwrap()
-            .to_string(),
-    ))
+    let path = &req.uri().to_string();
+    match interpret_async(
+        &state.registry,
+        &function_qname,
+        path,
+        query_params,
+        headers,
+    )
+    .await
+    {
+        Ok(value) => Ok(Json(value.to_string())),
+        Err(e) => {
+            // url checks out but function for method not found
+            if state.registry.get(&format!("{}.main",component)).is_some() {
+                Err(StatusCode::METHOD_NOT_ALLOWED)
+            } else {
+                Err(StatusCode::NOT_FOUND)
+            }
+        }
+    }
 }
