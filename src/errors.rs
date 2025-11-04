@@ -3,7 +3,7 @@ use crate::tokens::{Token, TokenType};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
-pub enum Error {
+pub enum CrudLangError {
     #[error("Compilation failed: {0}")]
     Compiler(#[from] CompilerErrorAtLine),
 

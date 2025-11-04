@@ -1,6 +1,6 @@
 use crate::chunk::Chunk;
-use crate::errors::Error;
-use crate::errors::Error::Platform;
+use crate::errors::CrudLangError;
+use crate::errors::CrudLangError::Platform;
 use crate::scanner::scan;
 use crate::value::Value;
 use crate::vm::interpret;
@@ -18,8 +18,9 @@ pub mod scanner;
 mod tokens;
 mod value;
 pub mod vm;
+pub mod repl;
 
-pub fn compile_sourcedir(source_dir: &str) -> Result<HashMap<String, Chunk>, Error> {
+pub fn compile_sourcedir(source_dir: &str) -> Result<HashMap<String, Chunk>, CrudLangError> {
     let mut registry = HashMap::new();
 
     for entry in WalkDir::new(source_dir).into_iter().filter_map(|e| e.ok()) {
@@ -44,11 +45,11 @@ pub fn compile_sourcedir(source_dir: &str) -> Result<HashMap<String, Chunk>, Err
     Ok(registry)
 }
 
-pub fn map_underlying() -> fn(std::io::Error) -> Error {
+pub fn map_underlying() -> fn(std::io::Error) -> CrudLangError {
     |e| Platform(e.to_string())
 }
 
-pub fn compile(src: &str) -> Result<HashMap<String, Chunk>, Error> {
+pub fn compile(src: &str) -> Result<HashMap<String, Chunk>, CrudLangError> {
     let tokens = scan(src)?;
     let mut registry = HashMap::new();
     let ast = ast_compiler::compile(None, tokens)?;
@@ -56,10 +57,10 @@ pub fn compile(src: &str) -> Result<HashMap<String, Chunk>, Error> {
     Ok(registry)
 }
 
-fn run(src: &str) -> Result<Value, Error> {
+fn run(src: &str) -> Result<Value, CrudLangError> {
     let tokens = scan(src)?;
     let mut registry = HashMap::new();
     let ast = ast_compiler::compile(None, tokens)?;
     bytecode_compiler::compile(None, &ast, &mut registry)?;
-    interpret(&registry, "main").map_err(Error::from)
+    interpret(&registry, "main").map_err(CrudLangError::from)
 }

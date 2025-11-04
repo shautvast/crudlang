@@ -2,21 +2,37 @@ use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::routing::any;
 use axum::{Json, Router};
+use clap::Parser;
 use crudlang::chunk::Chunk;
-use crudlang::errors::Error::Platform;
+use crudlang::errors::CrudLangError;
+use crudlang::errors::CrudLangError::Platform;
 use crudlang::vm::interpret_async;
 use crudlang::{compile_sourcedir, map_underlying};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-#[tokio::main]
-async fn main() -> Result<(), crudlang::errors::Error> {
-    tracing_subscriber::fmt::init();
+/// A simple CLI tool to greet users
+#[derive(Parser, Debug)]
+struct Args {
+    #[arg(short, long)]
+    repl: bool,
 
-    let registry = compile_sourcedir("source")?;
+    #[arg(short, long)]
+    source: Option<String>,
+}
+
+#[tokio::main]
+async fn main() -> Result<(), CrudLangError> {
+    println!("-- Crudlang --");
+    tracing_subscriber::fmt::init();
+    let args = Args::parse();
+    let source = args.source.unwrap_or("source".to_string());
+    let registry = compile_sourcedir(&source)?;
 
     let registry = Arc::new(registry);
+
     if !registry.is_empty() {
+        println!("-- Compilation successful -- Starting server --");
         let state = Arc::new(AppState {
             registry: registry.clone(),
         });
@@ -30,9 +46,13 @@ async fn main() -> Result<(), crudlang::errors::Error> {
             .map_err(map_underlying())?;
 
         println!(
-            "listening on {}",
+            "listening on {}\n",
             listener.local_addr().map_err(map_underlying())?
         );
+
+        if args.repl {
+            std::thread::spawn(move || crudlang::repl::start(registry).unwrap());
+        }
 
         axum::serve(listener, app).await.map_err(map_underlying())?;
         Ok(())
@@ -84,7 +104,7 @@ async fn handle_any(
         Ok(value) => Ok(Json(value.to_string())),
         Err(e) => {
             // url checks out but function for method not found
-            if state.registry.get(&format!("{}.main",component)).is_some() {
+            if state.registry.get(&format!("{}.main", component)).is_some() {
                 Err(StatusCode::METHOD_NOT_ALLOWED)
             } else {
                 Err(StatusCode::NOT_FOUND)

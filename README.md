@@ -158,3 +158,11 @@ fn add(a: string, b: string) -> string:
     a + " " + b
 ```
 * get() is the entry point for http GET method calls, likewise for POST, PUT, DELETE, etc.
+
+teveel ideeen
+* een repl die ook een test client is
+  * :le list endpoints -> tree
+  * :lf list functions -> tree
+    * met ... debugger FLW!
+  * ingebouwde editor (vi) reload on save
+* genereren van openapi spec
