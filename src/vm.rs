@@ -5,17 +5,19 @@ use crate::tokens::TokenType;
 use crate::value::Value;
 use axum::http::{Uri};
 use std::collections::HashMap;
+use std::sync::Arc;
+use arc_swap::Guard;
 use tracing::debug;
 
-pub struct Vm<'a> {
+pub struct Vm {
     ip: usize,
     stack: Vec<Value>,
     local_vars: HashMap<String, Value>,
     error_occurred: bool,
-    registry: &'a HashMap<String, Chunk>,
+    registry: Arc<HashMap<String, Chunk>>,
 }
 
-pub fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> Result<Value, RuntimeError> {
+pub fn interpret(registry: Guard<Arc<HashMap<String, Chunk>>>, function: &str) -> Result<Value, RuntimeError> {
     let chunk = registry.get(function).unwrap().clone();
     // for (key,value) in registry.iter() {
     //     println!("{}", key);
@@ -26,13 +28,13 @@ pub fn interpret(registry: &HashMap<String, Chunk>, function: &str) -> Result<Va
         stack: vec![],
         local_vars: HashMap::new(),
         error_occurred: false,
-        registry,
+        registry: registry.clone(),
     };
     vm.run(&chunk)
 }
 
 pub async fn interpret_async(
-    registry: &HashMap<String, Chunk>,
+    registry: Guard<Arc<HashMap<String, Chunk>>>,
     function: &str,
     uri: &str,
     query_params: HashMap<String, String>,
@@ -46,7 +48,7 @@ pub async fn interpret_async(
             stack: vec![],
             local_vars: HashMap::new(),
             error_occurred: false,
-            registry,
+            registry:registry.clone(),
         };
         vm.local_vars
             .insert("path".to_string(), Value::String(uri.into()));
@@ -73,13 +75,13 @@ pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, Runt
         stack: vec![],
         local_vars: HashMap::new(),
         error_occurred: false,
-        registry: &HashMap::new(),
+        registry: Arc::new(HashMap::new()),
     };
 
     vm.run_function(chunk, args)
 }
 
-impl<'a> Vm<'a> {
+impl Vm {
     fn run_function(&mut self, chunk: &Chunk, mut args: Vec<Value>) -> Result<Value, RuntimeError> {
         // arguments -> locals
         for (_, name) in chunk.vars.iter() {

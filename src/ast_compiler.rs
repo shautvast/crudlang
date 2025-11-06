@@ -5,11 +5,11 @@ use crate::errors::CompilerError::{
 };
 use crate::errors::CompilerErrorAtLine;
 use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, Date, Eof, Eol, Equal, F32, F64, False, FloatingPoint, Fn, Greater,
-    GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace, LeftBracket,
-    LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print,
-    RightBrace, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star, StringType,
-    True, U32, U64, UnsignedInteger,
+    Bang, Bool, Char, Colon, Date, Eof, Eol, Equal, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater,
+    Identifier, Indent, Integer, LeftBrace, LeftBracket, LeftParen, Less, LessEqual, LessLess,
+    Let, ListType, MapType, Minus, Object, Plus, Print, RightBrace, RightBracket, RightParen, SignedInteger,
+    SingleRightArrow, Slash, Star, StringType, True, UnsignedInteger, F32, F64,
+    I32, I64, U32, U64,
 };
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;

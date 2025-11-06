@@ -5,8 +5,9 @@ use std::collections::HashMap;
 use std::io;
 use std::io::Write;
 use std::sync::Arc;
+use arc_swap::{ArcSwap, Guard};
 
-pub fn start(registry: Arc<HashMap<String, Chunk>>) -> Result<(), CrudLangError> {
+pub fn start(registry: Guard<Arc<HashMap<String, Chunk>>>) -> Result<(), CrudLangError> {
     println!("REPL started -- Type ctrl-c to exit (both the repl and the server)");
     println!(":h for help");
     loop {
@@ -20,7 +21,7 @@ pub fn start(registry: Arc<HashMap<String, Chunk>>) -> Result<(), CrudLangError>
         match input {
             ":h" => help(),
             ":le" => list_endpoints(registry.clone()),
-            ":lf" => list_functions(registry.clone()),
+            ":lf" => list_endpoints(registry.clone()),
             _ => {}
         }
         // println!("[{}]",input);
