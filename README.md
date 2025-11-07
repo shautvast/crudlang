@@ -1,22 +1,22 @@
 # crud-lang
 
 ## Why?
-1. Existing languages are just fine, but building web services is bolted on, instead of supported out-of-the-box.
+1. Existing languages are just fine, but building web services is >always< bolted on, instead of supported out-of-the-box.
 2. Whereas every company needs an API these days. 
-3. Is it just me? -I always have trouble mapping urls the code that handles them.
+3. Is it just me? I always have trouble mapping urls the code that handles them.
 4. There is no language (AFAIK) that supports layering. (controllers, services, database access, etc). This pattern is ubiquitous (at least where I live). 
-5. ORM's are awful. Mapping from sql rows to objects is a pain. This should be easy.
+5. ORM's are crappy. Mapping from sql rows to objects is a pain. This should be easy.
 6. Json is ubiquitous. Convention over configuration: A controller returns json by default.
 7. Yes, you can automatically serve json from postgres or whatever, but that is not the point. We want to build services.
    
 ## Now what?
-- an experimental language for CRUD applications (web api's)
+- En experimental language for CRUD applications (web api's)
 - Enterprise as a first-class citizen
   - built-in types for dates and uuid for example
   - collection literals
   - ease of use for CRUD operations, like automatic mapping from sql rows to json
-- urls are made up of directories. 
-- a controller sourcefile is a file named web.crud
+- Urls are made up of directories. 
+- A controller sourcefile is a file named web.crud
 - likewise:
     - service.crud for services
     - db.crud database access code 
@@ -26,28 +26,37 @@
 - Therefore, services cannot call other services, because that is the recipe for spaghetti. Refactor your logic, abstract and put lower level code in utilities.
 - openapi support
 
-### An interpreter written in Rust. 
-OMG!
-And I cherry picked things I like, mostly from rust and python. 
+### An interpreter written in Rust.
+I cherry picked things I like, mostly from rust and python. 
   - strictly typed
   - [] is a list
   - {} is a map
-  - no objects, no inheritance
-  - structs and duck typing
+  - objects, not inheritance
   - everything is an expression
   - nice iterators.
   - First-class functions? Maybe...
   - automatic mapping from database to object to json
   - indenting like python
+- It's not written in stone. Things may change. 
 
-**types**
+**Numeric Types**
+  * u32, u64 (also in hex: 0x...)
+  * i32, i64 signed 
+  * f32, f64 (including scientific notation)
 
-- u32, i32
-- u64, i64
-- f32, f64,
-- string, bool, char
-- struct, enum
-- date
+**And also**
+  * string: "hello world"
+  * uuid , 
+  * bool: true, false
+  * char '.'
+  * object: {field: value}. An object is a map with fixed keys that are strings.
+  * enum 
+  * date
+
+**Collections**
+  * list: \[e1, e2, e3, ...]
+  * map: {key: value, key2: value2, ...}
+
 
 ## open questions
 - pluggability for middleware?, implement later?
@@ -65,25 +74,26 @@ And I cherry picked things I like, mostly from rust and python.
 * compiler first creates an AST and then compiles to bytecode (no file format yet)
 * uses a stack-based virtual machine
 
-## Current status: infancy
-* compiler and runtime are still limited but working
+## Current status: toddler stage
+* compiler and runtime are limited but working
+  * next big thing: control flow: branch jumps and loops
+* built on a solid foundation: [axum](https://github.com/tokio-rs/axum)
 * supports:
   * basic types:
     * 32/64 bit integers, signed and unsigned
     * 32/64 bit floats
-    * strings
-    * bools
-    * chars
+    * strings, bools, chars
     * lists and maps (as literals)
-  * type checking and type inference (although it needs more testing)
-  * arithmetic expressions
+    * still todo: dates, uuids, enums, objects
+  * type checking and type inference
+  * arithmetic expressions (all you'd expect including bitwise ops)
   * function declaration and calling
   * indenting like python (for now just 1 level, but both tabs or double spaces)
   * strict typing like in rust (no implicit numeric conversions)
   * basic set of operators, including logical and/or and bitwise operations
 * automatic injection of uri, query parameters and headers
-  * if you declare them they will be available in the function body
-  * example:
+  * if you declare them they will be available in the function body. 
+For example:
 ```html
 fn get(path: string, headers: map, query: map) -> string:
     "hello" + path
@@ -99,18 +109,14 @@ fn get(path: string, headers: map, query: map) -> string:
   * ```cargo run -- --watch``` 
   
 ## What's next?
-* guards: this will be the way to correctly deal with parameters
+* guards: this will be the way to deal with input
 ```
-fn get():
-    | path == "/" -> list:
-service.get_all()
-    | path == "/{uuid}" -> Customer?:
-service.get(uuid)?
-    | path == "/" && query.firstname -> Customer?:
-service.get_by_firstname(fname)?
-    | path == "/" && query.last_name -> Customer?
-service.get_by_lastname(lname)?
-    | 404
+fn get() -> [Customer] | Customer? | ():
+    | /. -> service.get_all()
+    | /./{uuid} -> service.get(uuid)?
+    | /.?{query.firstname} -> service.get_by_firstname(fname)?
+    | /.?{query.last_name} -> service.get_by_lastname(lname)?
+    | _ -> 404
 ```
 * this may also require ADT's...
 * object/struct types: Work in Progress

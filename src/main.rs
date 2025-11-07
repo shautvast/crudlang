@@ -12,6 +12,7 @@ use notify::Watcher;
 use std::collections::HashMap;
 use std::sync::Arc;
 use arc_swap::ArcSwap;
+use log::{debug, info};
 
 /// A simple CLI tool to greet users
 #[derive(Parser, Debug)]
@@ -58,7 +59,7 @@ async fn main() -> Result<(), CrudLangError> {
         );
 
         if args.repl {
-            std::thread::spawn(move || crudlang::repl::start(swap.load()).unwrap());
+            std::thread::spawn(move || crudlang::repl::start(swap.clone()).unwrap());
         }
 
         axum::serve(listener, app).await.map_err(map_underlying())?;
@@ -92,13 +93,14 @@ async fn handle_any(
         })
         .unwrap_or_default();
     let component = format!("{}/web", &uri.path());
-    let function_qname = format!("{}.{}", component, method);
+    let function_qname = format!("{}/{}", component, method);
 
     let mut headers = HashMap::new();
     for (k, v) in req.headers().iter() {
         headers.insert(k.to_string(), v.to_str().unwrap().to_string());
     }
     let path = &req.uri().to_string();
+    info!("invoked {:?} => {}",req, function_qname);
     match interpret_async(
         state.registry.load(),
         &function_qname,

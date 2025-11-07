@@ -229,7 +229,10 @@ impl Add<&Value> for &Value {
                 (Value::String(s), Value::Bool(b)) => Ok(Value::String(format!("{}{}", s, b))),
                 (Value::String(s), Value::Char(c)) => Ok(Value::String(format!("{}{}", s, c))),
                 (Value::String(s1), Value::String(s2)) => {
-                    Ok(Value::String(format!("{}{}", s1, s2)))
+                    let mut s = String::with_capacity(s1.len()+s2.len());
+                    s.push_str(s1.as_str());
+                    s.push_str(s2.as_str());
+                    Ok(Value::String(s))
                 }
                 (Value::String(s1), Value::Map(m)) => Ok(Value::String(format!("{}{:?}", s1, m))),
                 //enum?

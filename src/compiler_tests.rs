@@ -181,4 +181,9 @@ m"#);
     fn add_hex_ints(){
         assert_eq!(run(r#"0x10 + 0x20"#), Ok(Value::U32(48)));
     }
+
+    #[test]
+    fn package(){
+        assert_eq!(run(r#"a.b.c()"#), Ok(Value::U32(48)));
+    }
 }

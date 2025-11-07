@@ -83,6 +83,7 @@ pub enum TokenType {
     True,
     U32,
     U64,
+    Unknown,
     Void,
     While,
 }
@@ -152,6 +153,7 @@ impl fmt::Display for TokenType {
             TokenType::Slash => write!(f, "/"),
             TokenType::Star => write!(f, "*"),
             TokenType::True => write!(f, "true"),
+            TokenType::Unknown => write!(f, "?"),
             TokenType::Void => write!(f, "()"),
             TokenType::While => write!(f, "while"),
             TokenType::SignedInteger => write!(f, "i32/64"),

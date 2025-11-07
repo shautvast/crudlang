@@ -1,13 +1,12 @@
 use crate::ast_compiler::{Expression, Function, Statement};
 use crate::chunk::Chunk;
-use crate::errors::{CompilerErrorAtLine};
+use crate::errors::CompilerErrorAtLine;
 use crate::tokens::TokenType;
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_LIST,
-    OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET,
-    OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR,
-    OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+    OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL,
+    OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
 use std::collections::HashMap;
 
@@ -45,7 +44,7 @@ pub(crate) fn compile_in_namespace(
     let compiler = Compiler::new(name);
     let chunk = compiler.compile(ast, registry, name)?;
     let qname = if let Some(namespace) = namespace {
-        format!("{}.{}", namespace, "main")
+        format!("{}/{}", namespace, "main")
     } else {
         "main".to_string()
     };
@@ -113,7 +112,7 @@ impl Compiler {
                 let function_name = function.name.lexeme.clone();
                 let compiled_function = compile_function(function, registry, namespace)?;
                 registry.insert(
-                    format!("{}.{}", self.chunk.name, function_name),
+                    format!("{}/{}", self.chunk.name, function_name),
                     compiled_function,
                 );
             }
@@ -138,7 +137,21 @@ impl Compiler {
                 let name_index = self
                     .chunk
                     .find_constant(&qname)
-                    .unwrap_or_else(|| self.emit_constant(qname.into()) as usize);
+                    .unwrap_or_else(|| self.chunk.add_constant(Value::String(qname)));
+
+                for argument in arguments {
+                    self.compile_expression(namespace, argument, registry)?;
+                }
+                self.emit_bytes(OP_CALL, name_index as u16);
+                self.emit_byte(arguments.len() as u16);
+            }
+            Expression::RemoteFunctionCall {
+                name, arguments, ..
+            } => {
+                let name_index = self
+                    .chunk
+                    .find_constant(&name)
+                    .unwrap_or_else(|| self.chunk.add_constant(Value::String(name.to_string())));
 
                 for argument in arguments {
                     self.compile_expression(namespace, argument, registry)?;

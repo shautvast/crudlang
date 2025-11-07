@@ -1,15 +1,15 @@
-use crate::ast_compiler::Expression::Variable;
+use crate::ast_compiler::Expression::{FunctionCall, Literal, RemoteFunctionCall, Variable};
 use crate::errors::CompilerError::{
-    self, Expected, IncompatibleTypes, ParseError, TooManyParameters, TypeError, UnexpectedIndent,
-    UninitializedVariable,
+    self, Expected, IncompatibleTypes, ParseError, TooManyParameters, TypeError,
+    UndeclaredVariable, UnexpectedIndent, UninitializedVariable,
 };
 use crate::errors::CompilerErrorAtLine;
 use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, Date, Eof, Eol, Equal, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater,
-    Identifier, Indent, Integer, LeftBrace, LeftBracket, LeftParen, Less, LessEqual, LessLess,
-    Let, ListType, MapType, Minus, Object, Plus, Print, RightBrace, RightBracket, RightParen, SignedInteger,
-    SingleRightArrow, Slash, Star, StringType, True, UnsignedInteger, F32, F64,
-    I32, I64, U32, U64,
+    Bang, Bool, Char, Colon, Date, Dot, Eof, Eol, Equal, F32, F64, False, FloatingPoint, Fn,
+    Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace,
+    LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus,
+    Print, RightBrace, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star,
+    StringType, True, U32, U64, UnsignedInteger,
 };
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
@@ -75,6 +75,7 @@ impl AstCompiler {
                     break;
                 }
             }
+            debug!("AST {:?}", statements);
             Ok(statements)
         } else {
             Err(self.raise(CompilerError::Failure))
@@ -296,7 +297,9 @@ impl AstCompiler {
 
     fn expr_statement(&mut self) -> Result<Statement, CompilerErrorAtLine> {
         let expr = self.expression()?;
-        self.consume(Eol, Expected("end of line after expression."))?;
+        if !self.is_at_end() {
+            self.consume(Eol, Expected("end of line after expression."))?;
+        }
         Ok(Statement::ExpressionStmt { expression: expr })
     }
 
@@ -468,6 +471,27 @@ impl AstCompiler {
             debug!("{:?}", token);
             if self.match_token(vec![LeftParen]) {
                 self.function_call(token.lexeme)?
+            } else if self.check(Dot) {
+                let mut name = "/".to_string();
+                name.push_str(&self.previous().lexeme);
+                while self.match_token(vec![Dot]) {
+                    name.push_str("/");
+                    name.push_str(&self.peek().lexeme);
+                    self.advance();
+                }
+                if self.match_token(vec![LeftParen]) {
+                    self.function_call(name)?
+                } else {
+                    return if self.match_token(vec![Eol, Eof]) {
+                        Ok(Literal {
+                            value: Value::Void,
+                            literaltype: Object,
+                            line: token.line,
+                        })
+                    } else {
+                        Err(self.raise(UndeclaredVariable(token.lexeme.clone())))
+                    };
+                }
             } else {
                 self.variable_lookup(&token)?
             }
@@ -514,7 +538,7 @@ impl AstCompiler {
     }
 
     fn variable_lookup(&mut self, token: &Token) -> Result<Expression, CompilerErrorAtLine> {
-        let (var_name, var_type) = self
+        if let Some((var_name, var_type)) = self
             .vars
             .iter()
             .filter_map(|e| {
@@ -525,46 +549,80 @@ impl AstCompiler {
                 }
             })
             .find(|e| e.0 == &token.lexeme)
-            .ok_or_else(|| return self.raise(CompilerError::UndeclaredVariable(token.clone())))?;
-        Ok(Variable {
-            name: var_name.to_string(),
-            var_type: var_type.clone(),
-            line: token.line,
-        })
+        {
+            Ok(Variable {
+                name: var_name.to_string(),
+                var_type: var_type.clone(),
+                line: token.line,
+            })
+        } else {
+            if self.match_token(vec![Dot]) {
+                let right = self.primary()?;
+                self.binary(vec![Dot], right)
+            } else {
+                if self.is_at_end() {
+                    Ok(Literal {
+                        value: Value::Void,
+                        literaltype: Object,
+                        line: token.line,
+                    })
+                } else {
+                    Err(self.raise(UndeclaredVariable(token.lexeme.clone())))
+                }
+            }
+        }
     }
 
     fn function_call(&mut self, name: String) -> Result<Expression, CompilerErrorAtLine> {
-        let function_name = self.functions.get(&name).unwrap().name.lexeme.clone();
-        let function = self.functions.get(&function_name).unwrap().clone();
-
-        let mut arguments = vec![];
-        while !self.match_token(vec![RightParen]) {
-            if arguments.len() >= 25 {
-                return Err(self.raise(TooManyParameters));
+        if let Some(function) = self.functions.get(&name).cloned() {
+            let mut arguments = vec![];
+            while !self.match_token(vec![RightParen]) {
+                if arguments.len() >= 25 {
+                    return Err(self.raise(TooManyParameters));
+                }
+                let arg = self.expression()?;
+                let arg_type = arg.infer_type();
+                if arg_type != function.parameters[arguments.len()].var_type {
+                    return Err(self.raise(IncompatibleTypes(
+                        function.parameters[arguments.len()].var_type,
+                        arg_type,
+                    )));
+                }
+                arguments.push(arg);
+                if self.peek().token_type == TokenType::Comma {
+                    self.advance();
+                } else {
+                    self.consume(RightParen, Expected("')' after arguments."))?;
+                    break;
+                }
             }
-            let arg = self.expression()?;
-            let arg_type = arg.infer_type();
-            if arg_type != function.parameters[arguments.len()].var_type {
-                return Err(self.raise(IncompatibleTypes(
-                    function.parameters[arguments.len()].var_type,
-                    arg_type,
-                )));
+            Ok(FunctionCall {
+                line: self.peek().line,
+                name,
+                arguments,
+                return_type: function.return_type,
+            })
+        } else {
+            let mut arguments = vec![];
+            while !self.match_token(vec![RightParen]) {
+                if arguments.len() >= 25 {
+                    return Err(self.raise(TooManyParameters));
+                }
+                let arg = self.expression()?;
+                arguments.push(arg);
+                if self.peek().token_type == TokenType::Comma {
+                    self.advance();
+                } else {
+                    self.consume(RightParen, Expected("')' after arguments."))?;
+                    break;
+                }
             }
-            arguments.push(arg);
-            if self.peek().token_type == TokenType::Comma {
-                self.advance();
-            } else {
-                self.consume(RightParen, Expected("')' after arguments."))?;
-                break;
-            }
+            Ok(RemoteFunctionCall {
+                line: self.peek().line,
+                name,
+                arguments,
+            })
         }
-        let return_type = self.functions.get(&name).unwrap().return_type;
-        Ok(Expression::FunctionCall {
-            line: self.peek().line,
-            name,
-            arguments,
-            return_type,
-        })
     }
 
     fn consume(
@@ -576,11 +634,6 @@ impl AstCompiler {
             self.advance();
         } else {
             self.had_error = true;
-            // return Err(anyhow::anyhow!(
-            //     "{} at {:?}",
-            //     message.to_string(),
-            //     self.peek()
-            // ));
             return Err(self.raise(message));
         }
         Ok(self.previous().clone())
@@ -750,6 +803,12 @@ pub enum Expression {
         arguments: Vec<Expression>,
         return_type: TokenType,
     },
+    // a remote function call is a function call that is not defined in the current scope
+    RemoteFunctionCall {
+        line: usize,
+        name: String,
+        arguments: Vec<Expression>,
+    },
 }
 
 impl Expression {
@@ -761,8 +820,9 @@ impl Expression {
             Self::Literal { line, .. } => *line,
             Self::List { line, .. } => *line,
             Self::Map { line, .. } => *line,
-            Self::Variable { line, .. } => *line,
-            Self::FunctionCall { line, .. } => *line,
+            Variable { line, .. } => *line,
+            FunctionCall { line, .. } => *line,
+            RemoteFunctionCall { line, .. } => *line,
         }
     }
 
@@ -838,8 +898,9 @@ impl Expression {
                     UnsignedInteger
                 }
             }
-            Self::Variable { var_type, .. } => var_type.clone(),
-            Self::FunctionCall { return_type, .. } => return_type.clone(),
+            Variable { var_type, .. } => var_type.clone(),
+            FunctionCall { return_type, .. } => return_type.clone(),
+            RemoteFunctionCall { .. } => TokenType::Unknown,
         }
     }
 }

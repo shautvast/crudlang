@@ -1,5 +1,2 @@
 fn get(path: string) -> string:
-    add("hello", path)
-
-fn add(a: string, b: string) -> string:
-    a + " " + b
+    service.add("hello", path)

@@ -7,6 +7,7 @@ use axum::http::{Uri};
 use std::collections::HashMap;
 use std::sync::Arc;
 use arc_swap::Guard;
+use reqwest::get;
 use tracing::debug;
 
 pub struct Vm {
@@ -30,7 +31,7 @@ pub fn interpret(registry: Guard<Arc<HashMap<String, Chunk>>>, function: &str) -
         error_occurred: false,
         registry: registry.clone(),
     };
-    vm.run(&chunk)
+    vm.run(&get_context(function), &chunk)
 }
 
 pub async fn interpret_async(
@@ -40,7 +41,6 @@ pub async fn interpret_async(
     query_params: HashMap<String, String>,
     headers: HashMap<String, String>,
 ) -> Result<Value, RuntimeError> {
-    //TODO convert request to arguments
     let chunk = registry.get(function);
     if let Some(chunk) = chunk {
         let mut vm = Vm {
@@ -48,7 +48,7 @@ pub async fn interpret_async(
             stack: vec![],
             local_vars: HashMap::new(),
             error_occurred: false,
-            registry:registry.clone(),
+            registry: registry.clone(),
         };
         vm.local_vars
             .insert("path".to_string(), Value::String(uri.into()));
@@ -56,7 +56,7 @@ pub async fn interpret_async(
             .insert("query".to_string(), Value::Map(value_map(query_params)));
         vm.local_vars
             .insert("headers".to_string(), Value::Map(value_map(headers)));
-        vm.run(&chunk)
+        vm.run(&get_context(function), &chunk)
     } else {
         Err(RuntimeError::FunctionNotFound(function.to_string()))
     }
@@ -87,10 +87,10 @@ impl Vm {
         for (_, name) in chunk.vars.iter() {
             self.local_vars.insert(name.clone(), args.remove(0));
         }
-        self.run(&chunk)
+        self.run("", &chunk)
     }
 
-    fn run(&mut self, chunk: &Chunk) -> Result<Value, RuntimeError> {
+    fn run(&mut self, context: &str, chunk: &Chunk) -> Result<Value, RuntimeError> {
         loop {
             if self.error_occurred {
                 return Err(Something);
@@ -189,7 +189,6 @@ impl Vm {
                     let (_, name_index) = chunk.vars.get(var_index).unwrap();
                     let value = self.local_vars.get(name_index).unwrap();
                     self.push(value.clone()); // not happy , take ownership, no clone
-                    debug!("after get {:?}", self.stack);
                 }
                 OP_CALL => {
                     let function_name_index = self.read(chunk);
@@ -203,9 +202,14 @@ impl Vm {
                     args.reverse();
 
                     let function_name = chunk.constants[function_name_index].to_string();
-                    let function_chunk = self.registry.get(&function_name).unwrap();
-                    let result = interpret_function(function_chunk, args)?;
-                    self.push(result);
+                    let function_chunk = self.registry.get(&function_name)
+                        .or_else(|| self.registry.get(&format!("{}{}", context, function_name)));
+                    if function_chunk.is_none() {
+                        return Err(RuntimeError::FunctionNotFound(function_name));
+                    } else {
+                        let result = interpret_function(function_chunk.unwrap(), args)?;
+                        self.push(result);
+                    }
                 }
                 _ => {}
             }
@@ -254,6 +258,14 @@ fn unary_op(stack: &mut Vm, op: impl Fn(&Value) -> Result<Value, ValueError> + C
         Ok(result) => stack.push(result),
         Err(e) => panic!("Error: {:?} {:?}", e, a),
     }
+}
+
+fn get_context(path: &str) -> String {
+    let mut parts: Vec<&str> = path.split('/').collect();
+    if parts.len() >= 2 {
+        parts.truncate(parts.len() - 2);
+    }
+    parts.join("/")
 }
 
 pub const OP_CONSTANT: u16 = 1;

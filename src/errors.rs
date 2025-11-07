@@ -49,8 +49,8 @@ pub enum CompilerError {
     IncompatibleTypes(TokenType, TokenType),
     #[error("Error parsing number {0}")]
     ParseError(String),
-    #[error("Undeclared variable: {0:?}")]
-    UndeclaredVariable(Token),
+    #[error("Undeclared variable: '{0}'")]
+    UndeclaredVariable(String),
     #[error("Unexpected identifier")]
     UnexpectedIdentifier,
     #[error("Unterminated {0}")]
@@ -63,6 +63,8 @@ pub enum CompilerError {
     KeywordNotAllowedAsIdentifier(TokenType),
     #[error("Crud does not support numbers above 2^64")]
     Overflow,
+    #[error("Undeclared function: '{0}'")]
+    FunctionNotFound(String)
 }
 
 #[derive(Error, Debug, PartialEq)]
