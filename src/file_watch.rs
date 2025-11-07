@@ -10,6 +10,7 @@ use std::sync::mpsc::channel;
 use std::thread;
 use std::time::{Duration, SystemTime};
 use arc_swap::ArcSwap;
+use log::info;
 
 const ONE_SEC: Duration = Duration::from_secs(1);
 
@@ -44,7 +45,7 @@ pub fn start_watch_daemon(source: &str, registry: Arc<ArcSwap<HashMap<String, Ch
                     break;
                 }
             }
-            println!("refresh"); // TODO implement refresh source
+            info!("Change detected"); // TODO implement refresh source
             let new_registry = Arc::new(compile_sourcedir(&s).unwrap());
 
             registry.store(new_registry.clone());

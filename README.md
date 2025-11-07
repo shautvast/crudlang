@@ -75,19 +75,41 @@ And I cherry picked things I like, mostly from rust and python.
     * strings
     * bools
     * chars
-    * lists (as literals)
+    * lists and maps (as literals)
   * type checking and type inference (although it needs more testing)
   * arithmetic expressions
   * function declaration and calling
   * indenting like python (for now just 1 level, but both tabs or double spaces)
   * strict typing like in rust (no implicit numeric conversions)
   * basic set of operators, including logical and/or and bitwise operations
+* includes a rudimentary REPL
+  * ```cargo run -- --repl```)
+  * list functions and functions that serve endpoints
+  * planned: 
+    * edit source files
+    * test endpoints
+* basic http support (GET, POST, PUT, DELETE)
+* watch daemon that recompiles on file changes
+  * ```cargo run -- --watch``` 
   
 ## What's next?
-- collection types: --list-- and map
-- object/struct types
-- control flow
-- tests
+* guards: this will be the way to correctly deal with parameters
+```
+fn get():
+    | path == "/" -> list:
+service.get_all()
+    | path == "/{uuid}" -> Customer?:
+service.get(uuid)?
+    | path == "/" && query.firstname -> Customer?:
+service.get_by_firstname(fname)?
+    | path == "/" && query.last_name -> Customer?
+service.get_by_lastname(lname)?
+    | 404
+```
+* this may also require ADT's...
+* object/struct types: Work in Progress
+* control flow
+* test support
 
 ## What about performance?
 * Clueless really! We'll see.
@@ -158,11 +180,3 @@ fn add(a: string, b: string) -> string:
     a + " " + b
 ```
 * get() is the entry point for http GET method calls, likewise for POST, PUT, DELETE, etc.
-
-teveel ideeen
-* een repl die ook een test client is
-  * :le list endpoints -> tree
-  * :lf list functions -> tree
-    * met ... debugger FLW!
-  * ingebouwde editor (vi) reload on save
-* genereren van openapi spec
