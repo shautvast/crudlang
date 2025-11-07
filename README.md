@@ -50,7 +50,6 @@ And I cherry picked things I like, mostly from rust and python.
 - date
 
 ## open questions
-- how to model http headers
 - pluggability for middleware?, implement later?
 - JWT tokens, I guess
 
@@ -82,6 +81,13 @@ And I cherry picked things I like, mostly from rust and python.
   * indenting like python (for now just 1 level, but both tabs or double spaces)
   * strict typing like in rust (no implicit numeric conversions)
   * basic set of operators, including logical and/or and bitwise operations
+* automatic injection of uri, query parameters and headers
+  * if you declare them they will be available in the function body
+  * example:
+```html
+fn get(path: string, headers: map, query: map) -> string:
+    "hello" + path
+```
 * includes a rudimentary REPL
   * ```cargo run -- --repl```)
   * list functions and functions that serve endpoints
