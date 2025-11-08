@@ -203,7 +203,7 @@ impl Vm {
 
                     let function_name = chunk.constants[function_name_index].to_string();
                     let function_chunk = self.registry.get(&function_name)
-                        .or_else(|| self.registry.get(&format!("{}{}", context, function_name)));
+                        .or_else(|| self.registry.get(&format!("{}/{}", context, function_name)));
                     if function_chunk.is_none() {
                         return Err(RuntimeError::FunctionNotFound(function_name));
                     } else {

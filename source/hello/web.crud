@@ -1,2 +1,6 @@
+object Person:
+    name: string
+
 fn get(path: string) -> string:
-    service.add("hello", path)
+    let p = Person(name: path)
+    service.add("hello", p.name)

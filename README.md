@@ -112,10 +112,10 @@ fn get(path: string, headers: map, query: map) -> string:
 * guards: this will be the way to deal with input
 ```
 fn get() -> [Customer] | Customer? | ():
-    | /. -> service.get_all()
-    | /./{uuid} -> service.get(uuid)?
-    | /.?{query.firstname} -> service.get_by_firstname(fname)?
-    | /.?{query.last_name} -> service.get_by_lastname(lname)?
+    | / -> service.get_all()
+    | /{uuid} -> service.get(uuid)?
+    | ?{query.firstname} -> service.get_by_firstname(fname)?
+    | ?{query.last_name} -> service.get_by_lastname(lname)?
     | _ -> 404
 ```
 * this may also require ADT's...

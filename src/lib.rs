@@ -19,6 +19,7 @@ pub mod file_watch;
 mod keywords;
 pub mod repl;
 pub mod scanner;
+mod symbol_builder;
 mod tokens;
 mod value;
 pub mod vm;
@@ -34,9 +35,12 @@ pub fn compile_sourcedir(source_dir: &str) -> Result<HashMap<String, Chunk>, Cru
             let tokens = scan(&source)?;
             match ast_compiler::compile(Some(&path), tokens) {
                 Ok(statements) => {
-                    println!("{}", path);
                     let path = path.strip_prefix(source_dir).unwrap().replace(".crud", "");
-                    bytecode_compiler::compile(Some(&path), &statements, &mut registry)?;
+
+                    let mut symbol_table = HashMap::new();
+                    symbol_builder::build(&path, &statements, &mut symbol_table);
+
+                    bytecode_compiler::compile(Some(&path), &statements, &symbol_table, &mut registry)?;
                 }
                 Err(e) => {
                     println!("{}", e);
@@ -56,7 +60,9 @@ pub fn map_underlying() -> fn(std::io::Error) -> CrudLangError {
 pub fn recompile(src: &str, registry: &mut HashMap<String, Chunk>) -> Result<(), CrudLangError> {
     let tokens = scan(src)?;
     let ast = ast_compiler::compile(None, tokens)?;
-    bytecode_compiler::compile(None, &ast, registry)?;
+    let mut symbol_table = HashMap::new();
+    symbol_builder::build("", &ast, &mut symbol_table);
+    bytecode_compiler::compile(None, &ast, &symbol_table, registry)?;
     Ok(())
 }
 
@@ -64,15 +70,19 @@ pub fn compile(src: &str) -> Result<HashMap<String, Chunk>, CrudLangError> {
     let tokens = scan(src)?;
     let mut registry = HashMap::new();
     let ast = ast_compiler::compile(None, tokens)?;
-    bytecode_compiler::compile(None, &ast, &mut registry)?;
+    let mut symbol_table = HashMap::new();
+    symbol_builder::build("", &ast, &mut symbol_table);
+    bytecode_compiler::compile(None, &ast, &symbol_table, &mut registry)?;
     Ok(registry)
 }
 
-fn run(src: &str) -> Result<Value, CrudLangError> {
+pub(crate) fn run(src: &str) -> Result<Value, CrudLangError> {
     let tokens = scan(src)?;
-    let mut registry = HashMap::new();
     let ast = ast_compiler::compile(None, tokens)?;
-    bytecode_compiler::compile(None, &ast, &mut registry)?;
+    let mut symbol_table = HashMap::new();
+    symbol_builder::build("", &ast, &mut symbol_table);
+    let mut registry = HashMap::new();
+    bytecode_compiler::compile(None, &ast, &symbol_table, &mut registry)?;
     let registry = ArcSwap::from(Arc::new(registry));
     interpret(registry.load(), "main").map_err(CrudLangError::from)
 }

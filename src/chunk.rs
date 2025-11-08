@@ -16,6 +16,7 @@ pub struct Chunk {
     pub constants: Vec<Value>,
     lines: Vec<usize>,
     object_defs: HashMap<String, Vec<Parameter>>,
+    pub(crate) function_parameters: Vec<Parameter>,
     pub vars: Vec<(TokenType, String)>
 }
 
@@ -40,6 +41,7 @@ impl Chunk {
             constants: vec![],
             lines: vec![],
             object_defs: HashMap::new(),
+            function_parameters: vec![],
             vars: vec![]
         }
     }

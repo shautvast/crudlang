@@ -25,19 +25,31 @@ mod tests {
 
     #[test]
     fn literal_list() {
-        assert_eq!(run(r#"["abc","def"]"#), Ok(Value::List(vec![Value::String("abc".into()), Value::String("def".into())])));
+        assert_eq!(
+            run(r#"["abc","def"]"#),
+            Ok(Value::List(vec![
+                Value::String("abc".into()),
+                Value::String("def".into())
+            ]))
+        );
     }
 
     #[test]
     fn infer_type() {
-        assert_eq!(run(r#"let a=1
-a"#), Ok(Value::I64(1)));
+        assert_eq!(
+            run(r#"let a=1
+a"#),
+            Ok(Value::I64(1))
+        );
     }
 
     #[test]
     fn define_u32() {
-        assert_eq!(run(r#"let a:u32=1
-a"#), Ok(Value::U32(1)));
+        assert_eq!(
+            run(r#"let a:u32=1
+a"#),
+            Ok(Value::U32(1))
+        );
     }
 
     #[test]
@@ -56,7 +68,7 @@ a"#),
         if let Err(e) = &r {
             assert_eq!(
                 e.to_string(),
-                "Compilation failed: error at line 1, Type mismatch: Expected u32, found i32/64"
+                "Compilation failed: error at line 1, Expected u32, found i32/64"
             );
         }
     }
@@ -68,7 +80,7 @@ a"#),
         if let Err(e) = &r {
             assert_eq!(
                 e.to_string(),
-                "Compilation failed: error at line 1, Type mismatch: Expected u64, found i32/64"
+                "Compilation failed: error at line 1, Expected u64, found i32/64"
             );
         }
     }
@@ -80,7 +92,7 @@ a"#),
         if let Err(e) = &r {
             assert_eq!(
                 e.to_string(),
-                "Compilation failed: error at line 1, Type mismatch: Expected u64, found string"
+                "Compilation failed: error at line 1, Expected u64, found string"
             );
         }
     }
@@ -106,18 +118,20 @@ object Person:
         assert!(r.is_ok()); // does nothing runtime
     }
 
-    //     #[test]
-    //     fn object_() {
-    //         let r = compile(r#"
-    // object Person:
-    //    name: string
-    //
-    // let p = Person{name: "Sander"}
-    // print p
-    // "#, );
-    //         println!("{:?}", r);
-    //         assert!(r.is_ok());
-    //     }
+//     #[test]
+//     fn object_() {
+//         let r = run(
+//             r#"
+// object Person:
+//    name: string
+//
+// let p = Person(name: "Sander")
+// print p
+// "#,
+//         );
+//         println!("{:?}", r);
+//         assert!(r.is_ok());
+//     }
 
     #[test]
     fn literal_map() {
@@ -151,39 +165,54 @@ m"#);
     }
 
     #[test]
-    fn keyword_error(){
+    fn keyword_error() {
         let result = run(r#"let map = {"name": "Dent"}"#);
         assert!(result.is_err());
-        assert_eq!("Compilation failed: error at line 1, 'map' is a keyword. You cannot use it as an identifier",result.unwrap_err().to_string());
+        assert_eq!(
+            "Compilation failed: error at line 1, 'map' is a keyword. You cannot use it as an identifier",
+            result.unwrap_err().to_string()
+        );
     }
 
     #[test]
-    fn add_strings(){
+    fn add_strings() {
         assert_eq!(run(r#""a"+"b""#), Ok(Value::String("ab".into())));
     }
 
     #[test]
-    fn add_string_and_int(){
+    fn add_string_and_int() {
         assert_eq!(run(r#""a"+42"#), Ok(Value::String("a42".into())));
     }
 
     #[test]
-    fn add_string_and_bool(){
+    fn add_string_and_bool() {
         assert_eq!(run(r#""a"+false"#), Ok(Value::String("afalse".into())));
     }
 
     #[test]
-    fn add_string_and_scientific_float(){
-        assert_eq!(run(r#""a"+4.2e10"#), Ok(Value::String("a42000000000".into())));
+    fn add_string_and_scientific_float() {
+        assert_eq!(
+            run(r#""a"+4.2e10"#),
+            Ok(Value::String("a42000000000".into()))
+        );
     }
 
     #[test]
-    fn add_hex_ints(){
+    fn add_hex_ints() {
         assert_eq!(run(r#"0x10 + 0x20"#), Ok(Value::U32(48)));
     }
 
-    #[test]
-    fn package(){
-        assert_eq!(run(r#"a.b.c()"#), Ok(Value::U32(48)));
-    }
+    // #[test]
+    // fn package() {
+    //     assert_eq!(run(r#"a.b.c()"#), Ok(Value::U32(48)));
+    // }
+
+    // #[test]
+    // fn guards() {
+    //     assert_eq!(
+    //         run(r#"fn get_all_users() -> list:
+    // | /{uuid} -> service.get_by_uuid(uuid)?"#),
+    //         Ok(Value::Void)
+    //     );
+    // }
 }

@@ -17,12 +17,12 @@ impl Token {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Hash)]
+#[derive(Debug, PartialEq, Clone, Hash)]
 pub enum TokenType {
     Bang,
     BangEqual,
     BitAnd,
-    BitOr,
+    Pipe,
     BitXor,
     Bool,
     Char,
@@ -71,6 +71,7 @@ pub enum TokenType {
     Object,
     Plus,
     Print,
+    Question,
     Return,
     RightParen,
     RightBrace,
@@ -86,6 +87,7 @@ pub enum TokenType {
     Unknown,
     Void,
     While,
+    ObjectType(String)
 }
 
 impl fmt::Display for TokenType {
@@ -104,7 +106,7 @@ impl fmt::Display for TokenType {
             TokenType::Bang => write!(f, "!"),
             TokenType::BangEqual => write!(f, "!="),
             TokenType::BitAnd => write!(f, "&"),
-            TokenType::BitOr => write!(f, "|"),
+            TokenType::Pipe => write!(f, "|"),
             TokenType::BitXor => write!(f, "^"),
             TokenType::Colon => write!(f, ":"),
             TokenType::Comma => write!(f, ","),
@@ -142,8 +144,10 @@ impl fmt::Display for TokenType {
             TokenType::Minus => write!(f, "-"),
             TokenType::Not => write!(f, "not"),
             TokenType::Object => write!(f, "object"),
+            TokenType::ObjectType(_) => write!(f, "object"),
             TokenType::Plus => write!(f, "+"),
             TokenType::Print => write!(f, "print"),
+            TokenType::Question => write!(f, "?"),
             TokenType::Return => write!(f, "return"),
             TokenType::RightParen => write!(f, ")"),
             TokenType::RightBrace => write!(f, "}}"),
@@ -158,6 +162,7 @@ impl fmt::Display for TokenType {
             TokenType::While => write!(f, "while"),
             TokenType::SignedInteger => write!(f, "i32/64"),
             TokenType::UnsignedInteger => write!(f, "u32/64"),
+
         }
     }
 }

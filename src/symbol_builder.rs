@@ -1,0 +1,235 @@
+use crate::ast_compiler::{Expression, Parameter, Statement};
+use crate::errors::CompilerError;
+use crate::errors::CompilerError::{IncompatibleTypes, TypeError};
+use crate::tokens::{Token, TokenType};
+use crate::tokens::TokenType::{
+    Bool, Date, F32, F64, FloatingPoint, Greater, GreaterEqual, I32, I64, Integer, Less, LessEqual,
+    ListType, MapType, Minus, Object, Plus, SignedInteger, StringType, U32, U64, Unknown,
+    UnsignedInteger,
+};
+use log::debug;
+use std::collections::HashMap;
+
+pub enum Symbol {
+    Function {
+        name: String,
+        parameters: Vec<Parameter>,
+        return_type: TokenType,
+        body: Vec<Statement>,
+    },
+    Variable {
+        name: String,
+        var_type: TokenType,
+        initializer: Expression,
+    },
+    Object {
+        name: String,
+        fields: Vec<Parameter>,
+    },
+}
+
+fn make_qname(path: &str, name: &Token) -> String {
+    if path == "" {
+        name.lexeme.to_string()
+    } else {
+        format!("{}.{}", path, name.lexeme)
+    }
+}
+
+pub fn build(path: &str, ast: &[Statement], symbols: &mut HashMap<String, Symbol>) {
+    for statement in ast {
+        match statement {
+            Statement::VarStmt {
+                name,
+                var_type,
+                initializer,
+            } => {
+
+                symbols.insert(
+                    make_qname(path, name),
+                    Symbol::Variable {
+                        name: name.lexeme.to_string(),
+                        var_type: var_type.clone(),
+                        initializer: initializer.clone(),
+                    },
+                );
+            }
+            Statement::FunctionStmt { function } => {
+                symbols.insert(
+                    make_qname(path, &function.name),
+                    Symbol::Function {
+                        name: function.name.lexeme.to_string(),
+                        parameters: function.parameters.to_vec(),
+                        return_type: function.return_type.clone(),
+                        body: function.body.to_vec(),
+                    },
+                );
+            }
+            Statement::ObjectStmt { name, fields } => {
+                symbols.insert(
+                    make_qname(path, name),
+                    Symbol::Object {
+                        name: name.lexeme.to_string(),
+                        fields: fields.to_vec(),
+                    },
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+pub fn add_types(
+    path: &str,
+    ast: &[Statement],
+    symbols: &mut HashMap<String, Symbol>,
+) -> Result<(), CompilerError> {
+    for statement in ast {
+        match statement {
+            Statement::VarStmt {
+                name,
+                var_type,
+                initializer,
+            } => {
+                let inferred_type = infer_type(initializer, symbols);
+                let calculated_type = calculate_type(var_type, &inferred_type, symbols)?;
+                let entry = symbols.get_mut(&format!("{}.{}", path, name.lexeme));
+                if let Some(Symbol::Variable { var_type, .. }) = entry {
+                    *var_type = calculated_type;
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+pub fn calculate_type(
+    declared_type: &TokenType,
+    inferred_type: &TokenType,
+    _symbols: &HashMap<String, Symbol>,
+) -> Result<TokenType, CompilerError> {
+    Ok(if declared_type != &Unknown {
+        if declared_type != inferred_type {
+            match (declared_type, inferred_type) {
+                (I32, I64) => I32, //need this?
+                (I32, Integer) => I32,
+                (U32, I64) => U32,
+                (U32, Integer) => U32,
+                (F32, F64) => F32,
+                (F32, FloatingPoint) => F32,
+                (F64, I64) => F64,
+                (F64, FloatingPoint) => F64,
+                (U64, I64) => U64,
+                (U64, I32) => U64,
+                (StringType, _) => StringType, // meh, this all needs rigorous testing. Update: this is in progress
+                _ => {
+                    return Err(IncompatibleTypes(
+                        declared_type.clone(),
+                        inferred_type.clone(),
+                    ));
+                }
+            }
+        } else {
+            declared_type.clone()
+        }
+    } else {
+        match inferred_type {
+            Integer | I64 => I64,
+            FloatingPoint => F64,
+            Bool => Bool,
+            Date => Date,
+            ListType => ListType,
+            MapType => MapType,
+            Object => Object,
+            _ => return Err(CompilerError::UnexpectedType(inferred_type.clone())),
+        }
+    })
+}
+
+pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> TokenType {
+    match expr {
+        Expression::Binary {
+            left,
+            operator,
+            right,
+            ..
+        } => {
+            let left_type = infer_type(left, symbols);
+            let right_type = infer_type(right, symbols);
+            if vec![Greater, Less, GreaterEqual, LessEqual].contains(&operator.token_type) {
+                Bool
+            } else if left_type == right_type {
+                // map to determined numeric type if yet undetermined (32 or 64 bits)
+                match left_type {
+                    FloatingPoint => F64,
+                    Integer => I64,
+                    _ => left_type,
+                }
+            } else {
+                if let Plus = operator.token_type {
+                    // includes string concatenation with numbers
+                    // followed by type coercion to 64 bits for numeric types
+                    debug!("coerce {} : {}", left_type, right_type);
+                    match (left_type, right_type) {
+                        (_, StringType) => StringType,
+                        (StringType, _) => StringType,
+                        (FloatingPoint, _) => F64,
+                        (Integer, FloatingPoint) => F64,
+                        (Integer, _) => I64,
+                        (I64, Integer) => I64,
+                        (F64, _) => F64,
+                        (U64, U32) => U64,
+                        (I64, I32) => I64,
+                        // could add a date and a duration. future work
+                        // could add a List and a value. also future work
+                        // could add a Map and a tuple. Will I add tuple types? Future work!
+                        _ => panic!("Unexpected coercion"),
+                    }
+                    // could have done some fall through here, but this will fail less gracefully,
+                    // so if my thinking is wrong or incomplete it will panic
+                } else {
+                    // type coercion to 64 bits for numeric types
+                    debug!("coerce {} : {}", left_type, right_type);
+                    match (left_type, right_type) {
+                        (FloatingPoint, _) => F64,
+                        (Integer, FloatingPoint) => F64,
+                        (Integer, I64) => I64,
+                        (I64, FloatingPoint) => F64,
+                        (F64, _) => F64,
+                        (U64, U32) => U64,
+                        (I64, I32) => I64,
+                        (I64, Integer) => I64,
+                        _ => panic!("Unexpected coercion"),
+                    }
+                }
+            }
+        }
+        Expression::Grouping { expression, .. } => infer_type(expression, symbols),
+        Expression::Literal { literaltype, .. } => literaltype.clone(),
+        Expression::List { literaltype, .. } => literaltype.clone(),
+        Expression::Map { literaltype, .. } => literaltype.clone(),
+        Expression::Unary {
+            right, operator, ..
+        } => {
+            let literal_type = infer_type(right, symbols);
+            if literal_type == Integer && operator.token_type == Minus {
+                SignedInteger
+            } else {
+                UnsignedInteger
+            }
+        }
+        Expression::Variable { var_type, .. } => var_type.clone(),
+        Expression::FunctionCall { name, .. } => {
+            let symbol = symbols.get(name);
+            if let Some(Symbol::Function { return_type, .. }) = symbol {
+                return_type.clone()
+            } else {
+                Unknown
+            }
+        }
+        Expression::Stop { .. } => TokenType::Unknown,
+        Expression::PathMatch { .. } => TokenType::Unknown,
+        Expression::NamedParameter { .. } => TokenType::Unknown,
+    }
+}

@@ -1,6 +1,8 @@
-use crate::ast_compiler::{Expression, Function, Statement};
+use crate::ast_compiler::Expression::NamedParameter;
+use crate::ast_compiler::{Expression, Function, Parameter, Statement};
 use crate::chunk::Chunk;
-use crate::errors::CompilerErrorAtLine;
+use crate::errors::{CompilerError, CompilerErrorAtLine, RuntimeError};
+use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType;
 use crate::value::Value;
 use crate::vm::{
@@ -9,17 +11,20 @@ use crate::vm::{
     OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
 use std::collections::HashMap;
+use crate::tokens::TokenType::Unknown;
 
 pub fn compile(
     qualified_name: Option<&str>,
     ast: &Vec<Statement>,
+    symbols: &HashMap<String, Symbol>,
     registry: &mut HashMap<String, Chunk>,
 ) -> Result<(), CompilerErrorAtLine> {
-    compile_in_namespace(ast, qualified_name, registry)
+    compile_in_namespace(ast, qualified_name, symbols, registry)
 }
 
 pub(crate) fn compile_function(
     function: &Function,
+    symbols: &HashMap<String, Symbol>,
     registry: &mut HashMap<String, Chunk>,
     namespace: &str,
 ) -> Result<Chunk, CompilerErrorAtLine> {
@@ -31,18 +36,20 @@ pub(crate) fn compile_function(
 
         compiler.vars.insert(name, var_index);
     }
-
-    Ok(compiler.compile(&function.body, registry, namespace)?)
+    let mut chunk = compiler.compile(&function.body, symbols, registry, namespace)?;
+    chunk.function_parameters = function.parameters.to_vec();
+    Ok(chunk)
 }
 
 pub(crate) fn compile_in_namespace(
     ast: &Vec<Statement>,
     namespace: Option<&str>,
+    symbols: &HashMap<String, Symbol>,
     registry: &mut HashMap<String, Chunk>,
 ) -> Result<(), CompilerErrorAtLine> {
     let name = namespace.unwrap_or("main");
     let compiler = Compiler::new(name);
-    let chunk = compiler.compile(ast, registry, name)?;
+    let chunk = compiler.compile(ast, symbols, registry, name)?;
     let qname = if let Some(namespace) = namespace {
         format!("{}/{}", namespace, "main")
     } else {
@@ -72,11 +79,12 @@ impl Compiler {
     fn compile(
         mut self,
         ast: &Vec<Statement>,
+        symbols: &HashMap<String, Symbol>,
         registry: &mut HashMap<String, Chunk>,
         namespace: &str,
     ) -> Result<Chunk, CompilerErrorAtLine> {
         for statement in ast {
-            self.compile_statement(statement, registry, namespace)?;
+            self.compile_statement(statement, symbols, registry, namespace)?;
         }
 
         self.emit_byte(OP_RETURN);
@@ -86,6 +94,7 @@ impl Compiler {
     fn compile_statement(
         &mut self,
         statement: &Statement,
+        symbols: &HashMap<String, Symbol>,
         registry: &mut HashMap<String, Chunk>,
         namespace: &str,
     ) -> Result<(), CompilerErrorAtLine> {
@@ -96,21 +105,44 @@ impl Compiler {
                 var_type,
                 initializer,
             } => {
-                let name_index = self.chunk.add_var(var_type, &name.lexeme);
-                self.vars.insert(name.lexeme.clone(), name_index);
-                self.compile_expression(namespace, initializer, registry)?;
-                self.emit_bytes(OP_ASSIGN, name_index as u16);
+                let name = name.lexeme.as_str();
+                let var = symbols.get(name);
+                if let Some(Symbol::Variable {
+                    var_type,
+                    initializer,
+                    ..
+                }) = var
+                {
+                    let inferred_type = infer_type(initializer, symbols);
+                    let calculated_type = calculate_type(var_type, &inferred_type, symbols)
+                        .map_err(|e| CompilerErrorAtLine::raise(e, statement.line()))?;
+                    if var_type != &Unknown && var_type != &calculated_type {
+                        return Err(CompilerErrorAtLine::raise(
+                            CompilerError::IncompatibleTypes(var_type.clone(), calculated_type),
+                            statement.line(),
+                        ));
+                    }
+                    let name_index = self.chunk.add_var(var_type, name);
+                    self.vars.insert(name.to_string(), name_index);
+                    self.compile_expression(namespace, initializer, symbols, registry)?;
+                    self.emit_bytes(OP_ASSIGN, name_index as u16);
+                } else {
+                    return Err(CompilerErrorAtLine::raise(
+                        CompilerError::UndeclaredVariable(name.to_string()),
+                        statement.line(),
+                    ));
+                }
             }
             Statement::PrintStmt { value } => {
-                self.compile_expression(namespace, value, registry)?;
+                self.compile_expression(namespace, value, symbols, registry)?;
                 self.emit_byte(OP_PRINT);
             }
             Statement::ExpressionStmt { expression } => {
-                self.compile_expression(namespace, expression, registry)?;
+                self.compile_expression(namespace, expression, symbols, registry)?;
             }
             Statement::FunctionStmt { function } => {
                 let function_name = function.name.lexeme.clone();
-                let compiled_function = compile_function(function, registry, namespace)?;
+                let compiled_function = compile_function(function, symbols, registry, namespace)?;
                 registry.insert(
                     format!("{}/{}", self.chunk.name, function_name),
                     compiled_function,
@@ -118,6 +150,9 @@ impl Compiler {
             }
             Statement::ObjectStmt { name, fields } => {
                 self.chunk.add_object_def(&name.lexeme, fields);
+            }
+            Statement::GuardStatement { .. } => {
+                unimplemented!("guard statement")
             }
         }
         Ok(())
@@ -127,37 +162,63 @@ impl Compiler {
         &mut self,
         namespace: &str,
         expression: &Expression,
+        symbols: &HashMap<String, Symbol>,
         registry: &mut HashMap<String, Chunk>,
     ) -> Result<(), CompilerErrorAtLine> {
         match expression {
+            // Expression::FunctionCall {
+            //     name, arguments, ..
+            // } => {
+            //     let qname = format!("{}.{}", namespace, name);
+            //     let name_index = self
+            //         .chunk
+            //         .find_constant(&qname)
+            //         .unwrap_or_else(|| self.chunk.add_constant(Value::String(qname)));
+            //
+            //     for argument in arguments {
+            //         self.compile_expression(namespace, argument, registry)?;
+            //     }
+            //     self.emit_bytes(OP_CALL, name_index as u16);
+            //     self.emit_byte(arguments.len() as u16);
+            // }
             Expression::FunctionCall {
-                name, arguments, ..
-            } => {
-                let qname = format!("{}.{}", namespace, name);
-                let name_index = self
-                    .chunk
-                    .find_constant(&qname)
-                    .unwrap_or_else(|| self.chunk.add_constant(Value::String(qname)));
-
-                for argument in arguments {
-                    self.compile_expression(namespace, argument, registry)?;
-                }
-                self.emit_bytes(OP_CALL, name_index as u16);
-                self.emit_byte(arguments.len() as u16);
-            }
-            Expression::RemoteFunctionCall {
                 name, arguments, ..
             } => {
                 let name_index = self
                     .chunk
                     .find_constant(&name)
                     .unwrap_or_else(|| self.chunk.add_constant(Value::String(name.to_string())));
-
-                for argument in arguments {
-                    self.compile_expression(namespace, argument, registry)?;
+                let function = symbols.get(name);
+                if let Some(Symbol::Function {
+                    name,
+                    parameters,
+                    return_type,
+                    body,
+                }) = function
+                {
+                    for parameter in parameters {
+                        for argument in arguments {
+                            if let NamedParameter { name, .. } = argument {
+                                if name.lexeme == parameter.name.lexeme {
+                                    self.compile_expression(
+                                        namespace, argument, symbols, registry,
+                                    )?;
+                                    break;
+                                }
+                            } else {
+                                self.compile_expression(namespace, argument, symbols, registry)?;
+                                break;
+                            }
+                        }
+                    }
+                    self.emit_bytes(OP_CALL, name_index as u16);
+                    self.emit_byte(arguments.len() as u16);
+                } else {
+                    return Err(CompilerErrorAtLine::raise(
+                        CompilerError::FunctionNotFound(name.to_string()),
+                        0,
+                    ));
                 }
-                self.emit_bytes(OP_CALL, name_index as u16);
-                self.emit_byte(arguments.len() as u16);
             }
             Expression::Variable { name, .. } => {
                 let name_index = self.vars.get(name).unwrap();
@@ -168,24 +229,24 @@ impl Compiler {
             }
             Expression::List { values, .. } => {
                 for expr in values {
-                    self.compile_expression(namespace, expr, registry)?;
+                    self.compile_expression(namespace, expr, symbols, registry)?;
                 }
                 self.emit_bytes(OP_DEF_LIST, values.len() as u16);
             }
             Expression::Map { entries, .. } => {
                 for (key, value) in entries {
-                    self.compile_expression(namespace, key, registry)?;
-                    self.compile_expression(namespace, value, registry)?;
+                    self.compile_expression(namespace, key, symbols, registry)?;
+                    self.compile_expression(namespace, value, symbols, registry)?;
                 }
                 self.emit_bytes(OP_DEF_MAP, entries.len() as u16);
             }
             Expression::Grouping { expression, .. } => {
-                self.compile_expression(namespace, expression, registry)?
+                self.compile_expression(namespace, expression, symbols, registry)?
             }
             Expression::Unary {
                 operator, right, ..
             } => {
-                self.compile_expression(namespace, right, registry)?;
+                self.compile_expression(namespace, right, symbols, registry)?;
                 match operator.token_type {
                     TokenType::Minus => {
                         self.emit_byte(OP_NEGATE);
@@ -202,15 +263,15 @@ impl Compiler {
                 right,
                 ..
             } => {
-                self.compile_expression(namespace, left, registry)?;
-                self.compile_expression(namespace, right, registry)?;
+                self.compile_expression(namespace, left, symbols, registry)?;
+                self.compile_expression(namespace, right, symbols, registry)?;
                 match operator.token_type {
                     TokenType::Plus => self.emit_byte(OP_ADD),
                     TokenType::Minus => self.emit_byte(OP_SUBTRACT),
                     TokenType::Star => self.emit_byte(OP_MULTIPLY),
                     TokenType::Slash => self.emit_byte(OP_DIVIDE),
                     TokenType::BitAnd => self.emit_byte(OP_BITAND),
-                    TokenType::BitOr => self.emit_byte(OP_BITOR),
+                    TokenType::Pipe => self.emit_byte(OP_BITOR),
                     TokenType::BitXor => self.emit_byte(OP_BITXOR),
                     TokenType::GreaterGreater => self.emit_byte(OP_SHR),
                     TokenType::LessLess => self.emit_byte(OP_SHL),
@@ -224,6 +285,9 @@ impl Compiler {
                     _ => unimplemented!("binary other than plus, minus, star, slash"),
                 }
             }
+            Expression::Stop { line } => {}
+            Expression::PathMatch { line, .. } => {}
+            Expression::NamedParameter { line, .. } => {}
         }
         Ok(())
     }

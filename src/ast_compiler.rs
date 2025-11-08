@@ -1,4 +1,6 @@
-use crate::ast_compiler::Expression::{FunctionCall, Literal, RemoteFunctionCall, Variable};
+use crate::ast_compiler::Expression::{
+    FunctionCall, NamedParameter, Stop, Variable,
+};
 use crate::errors::CompilerError::{
     self, Expected, IncompatibleTypes, ParseError, TooManyParameters, TypeError,
     UndeclaredVariable, UnexpectedIndent, UninitializedVariable,
@@ -14,7 +16,6 @@ use crate::tokens::TokenType::{
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use log::debug;
-use std::collections::HashMap;
 
 pub fn compile(
     path: Option<&str>,
@@ -36,9 +37,7 @@ struct AstCompiler {
     tokens: Vec<Token>,
     current: usize,
     had_error: bool,
-    vars: Vec<Expression>,
     indent: Vec<usize>,
-    functions: HashMap<String, Function>,
 }
 
 impl AstCompiler {
@@ -47,9 +46,7 @@ impl AstCompiler {
             tokens,
             current: 0,
             had_error: false,
-            vars: vec![],
             indent: vec![0],
-            functions: HashMap::new(),
         }
     }
 
@@ -58,7 +55,6 @@ impl AstCompiler {
     }
 
     fn compile_tokens(&mut self) -> Result<Vec<Statement>, CompilerErrorAtLine> {
-        self.collect_functions()?;
         self.reset();
         self.compile()
     }
@@ -84,59 +80,6 @@ impl AstCompiler {
 
     fn raise(&self, error: CompilerError) -> CompilerErrorAtLine {
         CompilerErrorAtLine::raise(error, self.current_line())
-    }
-
-    fn collect_functions(&mut self) -> Result<(), CompilerErrorAtLine> {
-        while !self.is_at_end() {
-            if self.match_token(vec![Fn]) {
-                let name_token = self.consume(Identifier, Expected("function name."))?;
-                self.consume(LeftParen, Expected("'(' after function name."))?;
-                let mut parameters = vec![];
-                while !self.check(RightParen) {
-                    if parameters.len() >= 25 {
-                        return Err(self.raise(TooManyParameters));
-                    }
-                    let parm_name = self.consume(Identifier, Expected("a parameter name."))?;
-
-                    self.consume(Colon, Expected(": after parameter name"))?;
-                    let var_type = self.peek().token_type;
-                    self.vars.push(Expression::Variable {
-                        name: parm_name.lexeme.to_string(),
-                        var_type,
-                        line: parm_name.line,
-                    });
-                    self.advance();
-                    parameters.push(Parameter {
-                        name: parm_name,
-                        var_type,
-                    });
-                    if self.peek().token_type == TokenType::Comma {
-                        self.advance();
-                    }
-                }
-                self.consume(RightParen, Expected(" ')' after parameters."))?;
-                let return_type = if self.check(SingleRightArrow) {
-                    self.consume(SingleRightArrow, Expected("->"))?;
-                    self.advance().token_type
-                } else {
-                    TokenType::Void
-                };
-                self.consume(Colon, Expected("colon (:) after function declaration."))?;
-                self.consume(Eol, Expected("end of line."))?;
-
-                let function = Function {
-                    name: name_token.clone(),
-                    parameters,
-                    return_type,
-                    body: vec![],
-                };
-
-                self.functions.insert(name_token.lexeme, function);
-            } else {
-                self.advance();
-            }
-        }
-        Ok(())
     }
 
     fn indent(&mut self) -> Result<Option<Statement>, CompilerErrorAtLine> {
@@ -168,9 +111,63 @@ impl AstCompiler {
             self.let_declaration()
         } else if self.match_token(vec![Object]) {
             self.object_declaration()
+        } else if self.match_token(vec![TokenType::Pipe]) {
+            self.guard_declaration()
         } else {
             self.statement()
         }
+    }
+
+    //  | /. -> service.get_all()
+    //  | /{uuid} -> service.get(uuid)?
+    //  | ?{query.firstname} -> service.get_by_firstname(fname)?
+    fn guard_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
+        let if_expr = self.guard_if_expr()?;
+        let then_expr = self.expression()?;
+        Ok(Statement::GuardStatement { if_expr, then_expr })
+    }
+
+    fn guard_if_expr(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+        while !self.check(SingleRightArrow) {
+            if self.match_token(vec![Slash]) {
+                return self.path_guard_expr();
+            } else if self.match_token(vec![TokenType::Question]) {
+                return self.query_guard_expr();
+            } else {
+                return Err(self.raise(Expected("-> or ?")));
+            }
+        }
+        Ok(Stop {
+            line: self.peek().line,
+        })
+    }
+
+    fn query_guard_expr(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+        if self.match_token(vec![LeftBrace]) {
+            let query_params = self.expression()?;
+            self.consume(RightBrace, Expected("'}' after guard expression."))?;
+            Ok(query_params)
+        } else {
+            Ok(Stop {
+                line: self.peek().line,
+            })
+        }
+    }
+
+    fn path_guard_expr(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+        if self.match_token(vec![LeftBrace]) {
+            let path_params = self.match_expression()?;
+            self.consume(RightBrace, Expected("'}' after guard expression."))?;
+            Ok(path_params)
+        } else {
+            Ok(Stop {
+                line: self.peek().line,
+            })
+        }
+    }
+
+    fn match_expression(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+        Err(self.raise(Expected("unimplemented")))
     }
 
     fn object_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
@@ -194,7 +191,7 @@ impl AstCompiler {
             if !done {
                 let field_name = self.consume(Identifier, Expected("an object field name."))?;
                 self.consume(Colon, Expected("':' after field name."))?;
-                let field_type = self.peek().token_type;
+                let field_type = self.peek().token_type.clone();
                 if field_type.is_type() {
                     self.advance();
                 } else {
@@ -216,40 +213,61 @@ impl AstCompiler {
     fn function_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
         let name_token = self.consume(Identifier, Expected("function name."))?;
         self.consume(LeftParen, Expected("'(' after function name."))?;
+        let mut parameters = vec![];
         while !self.check(RightParen) {
-            self.advance();
-        }
+            if parameters.len() >= 25 {
+                return Err(self.raise(TooManyParameters));
+            }
+            let parm_name = self.consume(Identifier, Expected("a parameter name."))?;
 
-        self.consume(RightParen, Expected("')' after parameters."))?;
-        while !self.check(Colon) {
+            self.consume(Colon, Expected(": after parameter name"))?;
+            let var_type = self.peek().token_type.clone();
+
             self.advance();
+            parameters.push(Parameter {
+                name: parm_name,
+                var_type,
+            });
+            if self.peek().token_type == TokenType::Comma {
+                self.advance();
+            }
         }
+        self.consume(RightParen, Expected(" ')' after parameters."))?;
+        let return_type = if self.check(SingleRightArrow) {
+            self.consume(SingleRightArrow, Expected("->"))?;
+            self.advance().token_type.clone()
+        } else {
+            TokenType::Void
+        };
         self.consume(Colon, Expected("colon (:) after function declaration."))?;
         self.consume(Eol, Expected("end of line."))?;
 
         let current_indent = self.indent.last().unwrap();
         self.indent.push(current_indent + 1);
+
         let body = self.compile()?;
 
-        self.functions.get_mut(&name_token.lexeme).unwrap().body = body;
-
-        let function_stmt = Statement::FunctionStmt {
-            function: self.functions.get(&name_token.lexeme).unwrap().clone(),
+        let function = Function {
+            name: name_token.clone(),
+            parameters,
+            return_type,
+            body,
         };
-        Ok(function_stmt)
+
+        Ok(Statement::FunctionStmt { function })
     }
 
     fn let_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
         if self.peek().token_type.is_type() {
             return Err(self.raise(CompilerError::KeywordNotAllowedAsIdentifier(
-                self.peek().token_type,
+                self.peek().token_type.clone(),
             )));
         }
         let name_token = self.consume(Identifier, Expected("variable name."))?;
 
         let declared_type = if self.check(Colon) {
             self.advance();
-            Some(self.advance().token_type)
+            Some(self.advance().token_type.clone())
         } else {
             None
         };
@@ -258,22 +276,22 @@ impl AstCompiler {
             let initializer = self.expression()?;
             self.consume(Eol, Expected("end of line after initializer."))?;
 
-            let inferred_type = initializer.infer_type();
-            let var_type = match calculate_type(declared_type, inferred_type) {
-                Ok(var_type) => var_type,
-                Err(e) => {
-                    self.had_error = true;
-                    return Err(self.raise(TypeError(Box::new(e))));
-                }
-            };
-            self.vars.push(Expression::Variable {
-                name: name_token.lexeme.to_string(),
-                var_type,
-                line: name_token.line,
-            });
+            // let inferred_type = initializer.infer_type();
+            // let var_type = match calculate_type(declared_type, inferred_type) {
+            //     Ok(var_type) => var_type,
+            //     Err(e) => {
+            //         self.had_error = true;
+            //         return Err(self.raise(TypeError(Box::new(e))));
+            //     }
+            // };
+            // self.vars.push(Variable {
+            //     name: name_token.lexeme.to_string(),
+            //     var_type,
+            //     line: name_token.line,
+            // });
             Ok(Statement::VarStmt {
                 name: name_token,
-                var_type,
+                var_type: declared_type.unwrap_or(TokenType::Unknown),
                 initializer,
             })
         } else {
@@ -324,7 +342,7 @@ impl AstCompiler {
 
     fn bit_or(&mut self) -> Result<Expression, CompilerErrorAtLine> {
         let expr = self.bit_xor()?;
-        self.binary(vec![TokenType::BitOr], expr)
+        self.binary(vec![TokenType::Pipe], expr)
     }
 
     fn bit_xor(&mut self) -> Result<Expression, CompilerErrorAtLine> {
@@ -469,9 +487,13 @@ impl AstCompiler {
         } else {
             let token = self.advance().clone();
             debug!("{:?}", token);
+            // function call?
             if self.match_token(vec![LeftParen]) {
                 self.function_call(token.lexeme)?
+            } else if self.match_token(vec![Colon]) {
+                self.named_parameter(&token)?
             } else if self.check(Dot) {
+                // chain of variable or function lookups?
                 let mut name = "/".to_string();
                 name.push_str(&self.previous().lexeme);
                 while self.match_token(vec![Dot]) {
@@ -479,11 +501,13 @@ impl AstCompiler {
                     name.push_str(&self.peek().lexeme);
                     self.advance();
                 }
+                // chained function call?
                 if self.match_token(vec![LeftParen]) {
                     self.function_call(name)?
                 } else {
+                    // empty line
                     return if self.match_token(vec![Eol, Eof]) {
-                        Ok(Literal {
+                        Ok(Expression::Literal {
                             value: Value::Void,
                             literaltype: Object,
                             line: token.line,
@@ -493,8 +517,19 @@ impl AstCompiler {
                     };
                 }
             } else {
+                // none of the above, must be a variable lookup
                 self.variable_lookup(&token)?
             }
+        })
+    }
+
+    fn named_parameter(&mut self, name: &Token) -> Result<Expression, CompilerErrorAtLine> {
+        let value = self.expression()?;
+        let line = name.line;
+        Ok(NamedParameter {
+            name: name.clone(),
+            value: Box::new(value),
+            line,
         })
     }
 
@@ -537,92 +572,34 @@ impl AstCompiler {
         })
     }
 
-    fn variable_lookup(&mut self, token: &Token) -> Result<Expression, CompilerErrorAtLine> {
-        if let Some((var_name, var_type)) = self
-            .vars
-            .iter()
-            .filter_map(|e| {
-                if let Variable { name, var_type, .. } = e {
-                    Some((name, var_type))
-                } else {
-                    None
-                }
-            })
-            .find(|e| e.0 == &token.lexeme)
-        {
-            Ok(Variable {
-                name: var_name.to_string(),
-                var_type: var_type.clone(),
-                line: token.line,
-            })
-        } else {
-            if self.match_token(vec![Dot]) {
-                let right = self.primary()?;
-                self.binary(vec![Dot], right)
-            } else {
-                if self.is_at_end() {
-                    Ok(Literal {
-                        value: Value::Void,
-                        literaltype: Object,
-                        line: token.line,
-                    })
-                } else {
-                    Err(self.raise(UndeclaredVariable(token.lexeme.clone())))
-                }
-            }
-        }
+    fn variable_lookup(&mut self, name: &Token) -> Result<Expression, CompilerErrorAtLine> {
+        Ok(Variable {
+            name: name.lexeme.to_string(),
+            var_type: TokenType::Unknown,
+            line: name.line,
+        })
     }
 
     fn function_call(&mut self, name: String) -> Result<Expression, CompilerErrorAtLine> {
-        if let Some(function) = self.functions.get(&name).cloned() {
-            let mut arguments = vec![];
-            while !self.match_token(vec![RightParen]) {
-                if arguments.len() >= 25 {
-                    return Err(self.raise(TooManyParameters));
-                }
-                let arg = self.expression()?;
-                let arg_type = arg.infer_type();
-                if arg_type != function.parameters[arguments.len()].var_type {
-                    return Err(self.raise(IncompatibleTypes(
-                        function.parameters[arguments.len()].var_type,
-                        arg_type,
-                    )));
-                }
-                arguments.push(arg);
-                if self.peek().token_type == TokenType::Comma {
-                    self.advance();
-                } else {
-                    self.consume(RightParen, Expected("')' after arguments."))?;
-                    break;
-                }
+        let mut arguments = vec![];
+        while !self.match_token(vec![RightParen]) {
+            if arguments.len() >= 25 {
+                return Err(self.raise(TooManyParameters));
             }
-            Ok(FunctionCall {
-                line: self.peek().line,
-                name,
-                arguments,
-                return_type: function.return_type,
-            })
-        } else {
-            let mut arguments = vec![];
-            while !self.match_token(vec![RightParen]) {
-                if arguments.len() >= 25 {
-                    return Err(self.raise(TooManyParameters));
-                }
-                let arg = self.expression()?;
-                arguments.push(arg);
-                if self.peek().token_type == TokenType::Comma {
-                    self.advance();
-                } else {
-                    self.consume(RightParen, Expected("')' after arguments."))?;
-                    break;
-                }
+            let arg = self.expression()?;
+            arguments.push(arg);
+            if self.peek().token_type == TokenType::Comma {
+                self.advance();
+            } else {
+                self.consume(RightParen, Expected("')' after arguments."))?;
+                break;
             }
-            Ok(RemoteFunctionCall {
-                line: self.peek().line,
-                name,
-                arguments,
-            })
         }
+        Ok(FunctionCall {
+            line: self.peek().line,
+            name,
+            arguments,
+        })
     }
 
     fn consume(
@@ -681,45 +658,6 @@ impl AstCompiler {
     }
 }
 
-fn calculate_type(
-    declared_type: Option<TokenType>,
-    inferred_type: TokenType,
-) -> Result<TokenType, CompilerError> {
-    Ok(if let Some(declared_type) = declared_type {
-        if declared_type != inferred_type {
-            match (declared_type, inferred_type) {
-                (I32, I64) => I32, //need this?
-                (I32, Integer) => I32,
-                (U32, I64) => U32,
-                (U32, Integer) => U32,
-                (F32, F64) => F32,
-                (F32, FloatingPoint) => F32,
-                (F64, I64) => F64,
-                (F64, FloatingPoint) => F64,
-                (U64, I64) => U64,
-                (U64, I32) => U64,
-                (StringType, _) => StringType, // meh, this all needs rigorous testing. Update: this is in progress
-                _ => {
-                    return Err(IncompatibleTypes(declared_type, inferred_type));
-                }
-            }
-        } else {
-            declared_type
-        }
-    } else {
-        match inferred_type {
-            Integer | I64 => I64,
-            FloatingPoint => F64,
-            Bool => Bool,
-            Date => Date,
-            ListType => ListType,
-            MapType => MapType,
-            Object => Object,
-            _ => return Err(CompilerError::UnexpectedType(inferred_type)),
-        }
-    })
-}
-
 #[derive(Debug, Clone)]
 pub enum Statement {
     ExpressionStmt {
@@ -740,6 +678,10 @@ pub enum Statement {
         name: Token,
         fields: Vec<Parameter>,
     },
+    GuardStatement {
+        if_expr: Expression,
+        then_expr: Expression,
+    },
 }
 
 impl Statement {
@@ -750,6 +692,7 @@ impl Statement {
             Statement::PrintStmt { value } => value.line(),
             Statement::FunctionStmt { function, .. } => function.name.line,
             Statement::ObjectStmt { name, .. } => name.line,
+            Statement::GuardStatement { if_expr, .. } => if_expr.line(),
         }
     }
 }
@@ -801,13 +744,18 @@ pub enum Expression {
         line: usize,
         name: String,
         arguments: Vec<Expression>,
-        return_type: TokenType,
     },
-    // a remote function call is a function call that is not defined in the current scope
-    RemoteFunctionCall {
+    Stop {
         line: usize,
-        name: String,
-        arguments: Vec<Expression>,
+    },
+    PathMatch {
+        line: usize,
+        condition: Box<Expression>,
+    },
+    NamedParameter {
+        line: usize,
+        name: Token,
+        value: Box<Expression>,
     },
 }
 
@@ -822,85 +770,9 @@ impl Expression {
             Self::Map { line, .. } => *line,
             Variable { line, .. } => *line,
             FunctionCall { line, .. } => *line,
-            RemoteFunctionCall { line, .. } => *line,
-        }
-    }
-
-    pub fn infer_type(&self) -> TokenType {
-        match self {
-            Self::Binary {
-                left,
-                operator,
-                right,
-                ..
-            } => {
-                let left_type = left.infer_type();
-                let right_type = right.infer_type();
-                if vec![Greater, Less, GreaterEqual, LessEqual].contains(&operator.token_type) {
-                    Bool
-                } else if left_type == right_type {
-                    // map to determined numeric type if yet undetermined (32 or 64 bits)
-                    match left_type {
-                        FloatingPoint => F64,
-                        Integer => I64,
-                        _ => left_type,
-                    }
-                } else {
-                    if let Plus = operator.token_type {
-                        // includes string concatenation with numbers
-                        // followed by type coercion to 64 bits for numeric types
-                        debug!("coerce {} : {}", left_type, right_type);
-                        match (left_type, right_type) {
-                            (_, StringType) => StringType,
-                            (StringType, _) => StringType,
-                            (FloatingPoint, _) => F64,
-                            (Integer, FloatingPoint) => F64,
-                            (Integer, _) => I64,
-                            (I64, Integer) => I64,
-                            (F64, _) => F64,
-                            (U64, U32) => U64,
-                            (I64, I32) => I64,
-                            // could add a date and a duration. future work
-                            // could add a List and a value. also future work
-                            // could add a Map and a tuple. Will I add tuple types? Future work!
-                            _ => panic!("Unexpected coercion"),
-                        }
-                        // could have done some fall through here, but this will fail less gracefully,
-                        // so if my thinking is wrong or incomplete it will panic
-                    } else {
-                        // type coercion to 64 bits for numeric types
-                        debug!("coerce {} : {}", left_type, right_type);
-                        match (left_type, right_type) {
-                            (FloatingPoint, _) => F64,
-                            (Integer, FloatingPoint) => F64,
-                            (Integer, I64) => I64,
-                            (I64, FloatingPoint) => F64,
-                            (F64, _) => F64,
-                            (U64, U32) => U64,
-                            (I64, I32) => I64,
-                            (I64, Integer) => I64,
-                            _ => panic!("Unexpected coercion"),
-                        }
-                    }
-                }
-            }
-            Self::Grouping { expression, .. } => expression.infer_type(),
-            Self::Literal { literaltype, .. } => literaltype.clone(),
-            Self::List { literaltype, .. } => literaltype.clone(),
-            Self::Map { literaltype, .. } => literaltype.clone(),
-            Self::Unary {
-                right, operator, ..
-            } => {
-                let literal_type = right.infer_type();
-                if literal_type == Integer && operator.token_type == Minus {
-                    SignedInteger
-                } else {
-                    UnsignedInteger
-                }
-            }
-            Variable { var_type, .. } => var_type.clone(),
-            FunctionCall { return_type, .. } => return_type.clone(),
-            RemoteFunctionCall { .. } => TokenType::Unknown,
+            Stop { line } => *line,
+            Expression::PathMatch { line, .. } => *line,
+            NamedParameter { line, .. } => *line,
         }
     }
 }

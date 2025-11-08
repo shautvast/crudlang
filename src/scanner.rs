@@ -1,6 +1,6 @@
 use crate::errors::CompilerError::{IllegalCharLength, UnexpectedIdentifier, Unterminated};
 use crate::errors::{CompilerError, CompilerErrorAtLine};
-use crate::tokens::TokenType::{BitXor, FloatingPoint, Integer, U32, U64};
+use crate::tokens::TokenType::{BitXor, FloatingPoint, Integer, Question, U32, U64};
 use crate::{
     keywords,
     tokens::{
@@ -129,11 +129,12 @@ impl Scanner {
                     let t = if self.match_next('|') {
                         TokenType::LogicalOr
                     } else {
-                        TokenType::BitOr
+                        TokenType::Pipe
                     };
                     self.add_token(t);
                 }
                 '^' => self.add_token(BitXor),
+                '?' => self.add_token(Question),
                 _ => {
                     if c == '0' && self.peek() == 'x' {
                         self.hex_number()?;
