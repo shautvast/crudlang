@@ -1,8 +1,8 @@
 # tipi-lang
 
 ![Project Icon](icon.svg)
-Tipi / teepee means: 'the place where they live' in Sioux/Dakota. 
-see [https://sesquiotic.com/2013/02/23/teepee/]
+Tipi/teepee means: 'the place where they live' in Sioux/Dakota. 
+see https://sesquiotic.com/2013/02/23/teepee/
 
 Borrowing from that: 'the place where http lives'.
 
