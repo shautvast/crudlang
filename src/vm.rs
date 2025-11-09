@@ -190,6 +190,15 @@ impl Vm {
                     let value = self.local_vars.get(name_index).unwrap();
                     self.push(value.clone()); // not happy , take ownership, no clone
                 }
+                OP_LIST_GET => {
+                    let index_high = self.read(chunk);
+                    let index_low = self.read(chunk);
+                    let index = index_high <<16 + index_low;
+                    let list = self.pop();
+                    if let Value::List(list) = list {
+                        self.push(list.get(index).cloned().unwrap())
+                    }
+                }
                 OP_CALL => {
                     let function_name_index = self.read(chunk);
                     let num_args = self.read(chunk);
@@ -309,3 +318,4 @@ pub const OP_DEF_STRUCT: u16 = 38;
 pub const OP_DEF_F32: u16 = 39;
 pub const OP_DEF_F64: u16 = 40;
 pub const OP_ASSIGN: u16 = 41;
+pub const OP_LIST_GET: u16 = 42;

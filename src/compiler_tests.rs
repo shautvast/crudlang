@@ -2,7 +2,7 @@
 mod tests {
     use crate::value::Value;
     use crate::{compile, run};
-    use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone};
+    use chrono::{DateTime};
 
     #[test]
     fn literal_int() {
@@ -33,6 +33,17 @@ mod tests {
                 Value::String("def".into())
             ]))
         );
+    }
+
+    #[test]
+    fn index_in_list_literal() {
+        assert_eq!(run(r#"["abc","def"][0]"#), Ok(Value::String("abc".into())))
+    }
+
+    #[test]
+    fn index_in_list_as_var() {
+        assert_eq!(run(r#"let a:list = ["abc","def"]
+a[1]"#), Ok(Value::String("def".into())))
     }
 
     #[test]
@@ -209,10 +220,20 @@ m"#);
             run(r#"let date:datetime = d"2025-11-09 16:44:28.000 +0100"
 date"#),
             Ok(Value::DateTime(
-                 DateTime::parse_from_str("2025-11-09 16:44:28.000 +0100", "%Y-%m-%d %H:%M:%S%.3f %z").unwrap().into()
+                DateTime::parse_from_str(
+                    "2025-11-09 16:44:28.000 +0100",
+                    "%Y-%m-%d %H:%M:%S%.3f %z"
+                )
+                .unwrap()
+                .into()
             ))
         );
     }
+
+    // #[test]
+    // fn string_reverse(){
+    //     assert_eq!(run(r#""abc".reverse()"#), Ok(Value::String("cba".into())));
+    // }
 
     // #[test]
     // fn package() {

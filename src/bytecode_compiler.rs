@@ -1,7 +1,7 @@
 use crate::ast_compiler::Expression::NamedParameter;
-use crate::ast_compiler::{Expression, Function, Parameter, Statement};
+use crate::ast_compiler::{Expression, Function, Statement};
 use crate::chunk::Chunk;
-use crate::errors::{CompilerError, CompilerErrorAtLine, RuntimeError};
+use crate::errors::{CompilerError, CompilerErrorAtLine};
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType;
 use crate::tokens::TokenType::Unknown;
@@ -9,7 +9,8 @@ use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_LIST,
     OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL,
-    OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+    OP_LIST_GET, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR,
+    OP_SUBTRACT,
 };
 use std::collections::HashMap;
 
@@ -220,7 +221,7 @@ impl Compiler {
                     ));
                 }
             }
-            Expression::Variable { name, line,.. } => {
+            Expression::Variable { name, line, .. } => {
                 let name_index = self.vars.get(name);
                 if let Some(name_index) = name_index {
                     self.emit_bytes(OP_GET, *name_index as u16);
@@ -292,9 +293,16 @@ impl Compiler {
                     _ => unimplemented!("binary other than plus, minus, star, slash"),
                 }
             }
-            Expression::Stop { line } => {}
-            Expression::PathMatch { line, .. } => {}
-            Expression::NamedParameter { line, .. } => {}
+            Expression::Stop { .. } => {}
+            // Expression::PathMatch { line, .. } => {}
+            NamedParameter { .. } => {}
+            Expression::ListGet { index, list} => {
+                self.compile_expression(namespace, list, symbols, registry)?;
+                self.emit_byte(OP_LIST_GET);
+                self.emit_bytes((index >> 16) as u16, *index as u16);
+            }
+            Expression::MapGet { .. } => {}
+            Expression::FieldGet { .. } => {}
         }
         Ok(())
     }

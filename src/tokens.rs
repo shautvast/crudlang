@@ -156,7 +156,6 @@ impl fmt::Display for TokenType {
             TokenType::SingleRightArrow => write!(f, "->"),
             TokenType::Slash => write!(f, "/"),
             TokenType::Star => write!(f, "*"),
-            TokenType::DateTime => write!(f, "t\""),
             TokenType::True => write!(f, "true"),
             TokenType::Unknown => write!(f, "?"),
             TokenType::Void => write!(f, "()"),

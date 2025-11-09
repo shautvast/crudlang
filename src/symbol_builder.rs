@@ -75,7 +75,7 @@ pub fn build(path: &str, ast: &[Statement], symbols: &mut HashMap<String, Symbol
     }
 }
 
-pub fn add_types(
+pub fn _add_types(
     path: &str,
     ast: &[Statement],
     symbols: &mut HashMap<String, Symbol>,
@@ -225,7 +225,10 @@ pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> Token
             }
         }
         Expression::Stop { .. } => TokenType::Unknown,
-        Expression::PathMatch { .. } => TokenType::Unknown,
+        // Expression::PathMatch { .. } => TokenType::Unknown,
         Expression::NamedParameter { .. } => TokenType::Unknown,
+        Expression::ListGet { .. } => TokenType::Unknown,
+        Expression::MapGet { .. } => TokenType::Unknown,
+        Expression::FieldGet { .. } => TokenType::Unknown,
     }
 }

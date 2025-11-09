@@ -1,5 +1,5 @@
+use crate::tokens::TokenType;
 use std::fmt::Display;
-use crate::tokens::{Token, TokenType};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -64,7 +64,11 @@ pub enum CompilerError {
     #[error("Crud does not support numbers above 2^64")]
     Overflow,
     #[error("Undeclared function: '{0}'")]
-    FunctionNotFound(String)
+    FunctionNotFound(String),
+    #[error("Illegal argument: '{0}' cannot be used as an index into a list")]
+    IllegalIndexArgument(TokenType),
+    #[error("Illegal argument: '{0}' cannot be indexed")]
+    IllegalTypeToIndex(String),
 }
 
 #[derive(Error, Debug, PartialEq)]

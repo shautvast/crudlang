@@ -1,12 +1,14 @@
-use crate::ast_compiler::Expression::{FunctionCall, NamedParameter, Stop, Variable};
+use crate::ast_compiler::Expression::{
+    FieldGet, FunctionCall, ListGet, MapGet, NamedParameter, Stop, Variable,
+};
 use crate::errors::CompilerError::{
     self, Expected, IncompatibleTypes, ParseError, TooManyParameters, TypeError,
     UndeclaredVariable, UnexpectedIndent, UninitializedVariable,
 };
 use crate::errors::CompilerErrorAtLine;
 use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, DateTime, Dot, Eof, Eol, Equal, F32, F64, False, FloatingPoint,
-    Fn, Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace,
+    Bang, Bool, Char, Colon, DateTime, Dot, Eof, Eol, Equal, F32, F64, False, FloatingPoint, Fn,
+    Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace,
     LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus,
     Print, RightBrace, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star,
     StringType, True, U32, U64, UnsignedInteger,
@@ -14,6 +16,7 @@ use crate::tokens::TokenType::{
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use log::debug;
+use tokio_postgres::fallible_iterator::FallibleIterator;
 
 pub fn compile(
     path: Option<&str>,
@@ -401,8 +404,61 @@ impl AstCompiler {
                 right: Box::new(right),
             })
         } else {
-            self.primary()
+            let expr = self.get();
+            expr
         }
+    }
+
+    fn get(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.primary()?;
+
+        if self.match_token(vec![LeftParen]) {
+            let name = self.peek().clone();
+            self.advance();
+            self.function_call(name)
+        } else if self.match_token(vec![LeftBracket]) {
+            let name = self.peek().clone();
+            self.advance();
+            self.index(expr, name)
+        } else if self.match_token(vec![Dot]){
+            let name = self.peek().clone();
+            self.advance();
+            self.field(expr, name)
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn index(
+        &mut self,
+        operand: Expression,
+        index: Token,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let get = (match operand {
+            Expression::Map { .. } => MapGet {
+                key: index.lexeme.clone(),
+            },
+            Expression::List { .. } => ListGet {
+                list: Box::new(operand),
+                index: index.lexeme.clone().parse().map_err(|_| {
+                    self.raise(CompilerError::IllegalTypeToIndex(index.lexeme.clone()))
+                })?,
+            },
+            _ => return Err(self.raise(CompilerError::IllegalTypeToIndex("".to_string()))),
+        });
+        self.consume(RightBracket, Expected("']' after index."))?;
+        Ok(get)
+    }
+
+    fn field(
+        &mut self,
+        operand: Expression,
+        index: Token,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        //TODO?
+        Ok(Expression::FieldGet {
+            field: index.lexeme.clone(),
+        })
     }
 
     fn primary(&mut self) -> Result<Expression, CompilerErrorAtLine> {
@@ -500,34 +556,35 @@ impl AstCompiler {
             debug!("{:?}", token);
             // function call?
             if self.match_token(vec![LeftParen]) {
-                self.function_call(token.lexeme)?
+                self.function_call(token.clone())?
             } else if self.match_token(vec![Colon]) {
                 self.named_parameter(&token)?
-            } else if self.check(Dot) {
-                // chain of variable or function lookups?
-                let mut name = "/".to_string();
-                name.push_str(&self.previous().lexeme);
-                while self.match_token(vec![Dot]) {
-                    name.push_str("/");
-                    name.push_str(&self.peek().lexeme);
-                    self.advance();
-                }
-                // chained function call?
-                if self.match_token(vec![LeftParen]) {
-                    self.function_call(name)?
-                } else {
-                    // empty line
-                    return if self.match_token(vec![Eol, Eof]) {
-                        Ok(Expression::Literal {
-                            value: Value::Void,
-                            literaltype: Object,
-                            line: token.line,
-                        })
-                    } else {
-                        Err(self.raise(UndeclaredVariable(token.lexeme.clone())))
-                    };
-                }
             } else {
+                // } else if self.check(Dot) {
+                // chain of variable or function lookups?
+                // let mut name = "/".to_string();
+                // name.push_str(&self.previous().lexeme);
+                // while self.match_token(vec![Dot]) {
+                //     name.push_str("/");
+                //     name.push_str(&self.peek().lexeme);
+                //     self.advance();
+                // }
+                // chained function call?
+                // if self.match_token(vec![LeftParen]) {
+                //     self.function_call(name())?
+                // } else {
+                // empty line
+                // return if self.match_token(vec![Eol, Eof]) {
+                //     Ok(Expression::Literal {
+                //         value: Value::Void,
+                //         literaltype: Object,
+                //         line: token.line,
+                //     })
+                // } else {
+                //     Err(self.raise(UndeclaredVariable(token.lexeme.clone())))
+                // };
+                // }
+                // } else {
                 // none of the above, must be a variable lookup
                 self.variable_lookup(&token)?
             }
@@ -591,7 +648,7 @@ impl AstCompiler {
         })
     }
 
-    fn function_call(&mut self, name: String) -> Result<Expression, CompilerErrorAtLine> {
+    fn function_call(&mut self, name: Token) -> Result<Expression, CompilerErrorAtLine> {
         let mut arguments = vec![];
         while !self.match_token(vec![RightParen]) {
             if arguments.len() >= 25 {
@@ -608,7 +665,7 @@ impl AstCompiler {
         }
         Ok(FunctionCall {
             line: self.peek().line,
-            name,
+            name: name.lexeme.to_string(),
             arguments,
         })
     }
@@ -759,14 +816,24 @@ pub enum Expression {
     Stop {
         line: usize,
     },
-    PathMatch {
-        line: usize,
-        condition: Box<Expression>,
-    },
+    // PathMatch {
+    //     line: usize,
+    //     condition: Box<Expression>,
+    // },
     NamedParameter {
         line: usize,
         name: Token,
         value: Box<Expression>,
+    },
+    MapGet {
+        key: String,
+    },
+    ListGet {
+        list: Box<Expression>,
+        index: usize,
+    },
+    FieldGet {
+        field: String,
     },
 }
 
@@ -782,8 +849,28 @@ impl Expression {
             Variable { line, .. } => *line,
             FunctionCall { line, .. } => *line,
             Stop { line } => *line,
-            Expression::PathMatch { line, .. } => *line,
+            // Expression::PathMatch { line, .. } => *line,
             NamedParameter { line, .. } => *line,
+            MapGet { .. } => 0,
+            ListGet { .. } => 0,
+            FieldGet { .. } => 0,
         }
     }
+
+    // pub fn get_type(&self) -> &str {
+    //     match self {
+    //         Expression::Binary { .. } => "binary",
+    //         Expression::Unary { .. } => TokenType::Unknown,
+    //         Expression::Grouping { .. } => TokenType::Unknown,
+    //         Expression::Literal { literaltype, .. } => literaltype.clone(),
+    //         Expression::List { literaltype, .. } => literaltype.clone(),
+    //         Expression::Map { literaltype, .. } => literaltype.clone(),
+    //         Expression::Variable { var_type, .. } => var_type.clone(),
+    //         Expression::FunctionCall { .. } => TokenType::Unknown,
+    //         Expression::Stop { .. } => TokenType::Unknown,
+    //         Expression::NamedParameter { .. } => TokenType::Unknown,
+    //         Expression::MapGet { .. } => TokenType::Unknown,
+    //         Expression::ListGet { .. } => TokenType::Unknown,
+    //     }
+    // }
 }
