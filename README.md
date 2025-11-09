@@ -1,6 +1,10 @@
 # tipi-lang
 
 ![Project Icon](icon.svg)
+Tipi / teepee means: 'the place where they live' in Sioux/Dakota. 
+see [https://sesquiotic.com/2013/02/23/teepee/]
+
+Borrowing from that: 'the place where http lives'.
 
 ## Why?
 1. Existing languages are just fine, but building web services is >always< bolted on, instead of supported out-of-the-box.
