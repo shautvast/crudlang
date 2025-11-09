@@ -111,6 +111,11 @@ impl Scanner {
                 }
                 '\'' => self.char()?,
                 '"' => self.string()?,
+                't' => {
+                    if self.match_next('"') {
+                        self.datetime()?;
+                    }
+                }
                 '\r' | '\t' | ' ' => {}
                 '\n' => {
                     self.line += 1;
@@ -218,6 +223,18 @@ impl Scanner {
 
     fn raise(&self, error: CompilerError) -> CompilerErrorAtLine {
         CompilerErrorAtLine::raise(error, self.line)
+    }
+
+    fn datetime(&mut self) -> Result<(), CompilerErrorAtLine> {
+        while self.peek() != '"' && !self.is_at_end() {
+            self.advance();
+        }
+        self.advance();
+        let value: String = self.chars[self.start + 2..self.current - 1]
+            .iter()
+            .collect();
+        self.add_token_with_value(TokenType::DateTime, value);
+        Ok(())
     }
 
     fn string(&mut self) -> Result<(), CompilerErrorAtLine> {

@@ -1,5 +1,5 @@
 use crate::errors::ValueError;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -23,7 +23,7 @@ pub enum Value {
     String(String),
     Char(char),
     Bool(bool),
-    Date(DateTime<Utc>),
+    DateTime(DateTime<Utc>),
     Enum,
     List(Vec<Value>),
     Map(HashMap<Value, Value>),
@@ -144,7 +144,7 @@ impl Into<Value> for bool {
 
 impl Into<Value> for DateTime<Utc> {
     fn into(self) -> Value {
-        Value::Date(self)
+        Value::DateTime(self)
     }
 }
 
@@ -160,7 +160,7 @@ impl Display for Value {
             &Value::F32(v) => write!(f, "{}", v),
             &Value::F64(v) => write!(f, "{}", v),
             &Value::Char(v) => write!(f, "{}", v),
-            &Value::Date(v) => write!(f, "{}", v),
+            &Value::DateTime(v) => write!(f, "{}", v),
             &Value::Enum => write!(f, "enum"),
             &Value::ObjectType(o) => write!(f, "{}: {:?}", o.definition, o.fields),
             &Value::List(v) => write!(f, "{:?}", v),
@@ -383,7 +383,7 @@ impl PartialEq for Value {
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Char(a), Value::Char(b)) => a == b,
-            (Value::Date(a), Value::Date(b)) => a == b,
+            (Value::DateTime(a), Value::DateTime(b)) => a == b,
             (Value::List(a), Value::List(b)) => a == b,
             (Value::Map(a), Value::Map(b)) => {
                 let mut equal = true;
@@ -415,7 +415,7 @@ impl PartialOrd for Value {
             (Value::F64(a), Value::F64(b)) => Some(a.partial_cmp(b)?),
             (Value::String(a), Value::String(b)) => Some(a.partial_cmp(b)?),
             (Value::Char(a), Value::Char(b)) => Some(a.partial_cmp(b)?),
-            (Value::Date(a), Value::Date(b)) => Some(a.partial_cmp(b)?),
+            (Value::DateTime(a), Value::DateTime(b)) => Some(a.partial_cmp(b)?),
             _ => None,
         }
     }
@@ -436,7 +436,7 @@ impl Hash for Value {
             Value::String(s) => s.hash(state),
             Value::Char(c) => c.hash(state),
             Value::Bool(b) => b.hash(state),
-            Value::Date(d) => d.hash(state),
+            Value::DateTime(d) => d.hash(state),
             Value::List(l) => l.hash(state),
             _ => {}
         }

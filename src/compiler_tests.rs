@@ -2,6 +2,7 @@
 mod tests {
     use crate::value::Value;
     use crate::{compile, run};
+    use chrono::{DateTime, FixedOffset, NaiveDate, TimeZone};
 
     #[test]
     fn literal_int() {
@@ -118,20 +119,20 @@ object Person:
         assert!(r.is_ok()); // does nothing runtime
     }
 
-//     #[test]
-//     fn object_() {
-//         let r = run(
-//             r#"
-// object Person:
-//    name: string
-//
-// let p = Person(name: "Sander")
-// print p
-// "#,
-//         );
-//         println!("{:?}", r);
-//         assert!(r.is_ok());
-//     }
+    //     #[test]
+    //     fn object_() {
+    //         let r = run(
+    //             r#"
+    // object Person:
+    //    name: string
+    //
+    // let p = Person(name: "Sander")
+    // print p
+    // "#,
+    //         );
+    //         println!("{:?}", r);
+    //         assert!(r.is_ok());
+    //     }
 
     #[test]
     fn literal_map() {
@@ -200,6 +201,16 @@ m"#);
     #[test]
     fn add_hex_ints() {
         assert_eq!(run(r#"0x10 + 0x20"#), Ok(Value::U32(48)));
+    }
+
+    #[test]
+    fn date_literal() {
+        assert_eq!(
+            run(r#"t"2025-11-09 16:44:28.000 +0100""#),
+            Ok(Value::DateTime(
+                 DateTime::parse_from_str("2025-11-09 16:44:28.000 +0100", "%Y-%m-%d %H:%M:%S%.3f %z").unwrap().into()
+            ))
+        );
     }
 
     // #[test]

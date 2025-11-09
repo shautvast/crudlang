@@ -1,14 +1,12 @@
-use crate::ast_compiler::Expression::{
-    FunctionCall, NamedParameter, Stop, Variable,
-};
+use crate::ast_compiler::Expression::{FunctionCall, NamedParameter, Stop, Variable};
 use crate::errors::CompilerError::{
     self, Expected, IncompatibleTypes, ParseError, TooManyParameters, TypeError,
     UndeclaredVariable, UnexpectedIndent, UninitializedVariable,
 };
 use crate::errors::CompilerErrorAtLine;
 use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, Date, Dot, Eof, Eol, Equal, F32, F64, False, FloatingPoint, Fn,
-    Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace,
+    Bang, Bool, Char, Colon, Date, DateTime, Dot, Eof, Eol, Equal, F32, F64, False, FloatingPoint,
+    Fn, Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace,
     LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus,
     Print, RightBrace, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star,
     StringType, True, U32, U64, UnsignedInteger,
@@ -469,13 +467,26 @@ impl AstCompiler {
             Expression::Literal {
                 line: self.peek().line,
                 literaltype: StringType,
-                value: Value::String(self.previous().lexeme.to_string()),
+                value: Value::String(self.previous().lexeme.clone()),
             }
         } else if self.match_token(vec![Char]) {
             Expression::Literal {
                 line: self.peek().line,
                 literaltype: Char,
                 value: Value::Char(self.previous().lexeme.chars().next().unwrap()),
+            }
+        } else if self.match_token(vec![DateTime]) {
+            Expression::Literal {
+                line: self.peek().line,
+                literaltype: DateTime,
+                value: Value::DateTime(
+                    chrono::DateTime::parse_from_str(
+                        &self.previous().lexeme,
+                        "%Y-%m-%d %H:%M:%S%.3f %z",
+                    )
+                    .map_err(|e| self.raise(ParseError(self.previous().lexeme.clone())))?
+                    .into(),
+                ),
             }
         } else if self.match_token(vec![LeftParen]) {
             let expr = self.expression()?;
