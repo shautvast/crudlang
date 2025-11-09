@@ -1,4 +1,4 @@
-# crud-lang
+# teepee-lang
 
 ![Project Icon](icon.svg)
 
