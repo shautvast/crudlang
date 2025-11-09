@@ -1,4 +1,4 @@
-# teepee-lang
+# tipi-lang
 
 ![Project Icon](icon.svg)
 
