@@ -162,6 +162,12 @@ Strings support concatening with +
 let c = b + "world"
 ```
 
+**dates and time**
+Create a date with
+```
+let d:date = ""
+```
+
 **lists**
 ```
 let list = ["foo", "bar", 1, 1.0]

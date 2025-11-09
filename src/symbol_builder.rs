@@ -2,7 +2,7 @@ use crate::ast_compiler::{Expression, Parameter, Statement};
 use crate::errors::CompilerError;
 use crate::errors::CompilerError::{IncompatibleTypes, TypeError};
 use crate::tokens::{Token, TokenType};
-use crate::tokens::TokenType::{Bool, Date, F32, F64, FloatingPoint, Greater, GreaterEqual, I32, I64, Integer, Less, LessEqual, ListType, MapType, Minus, Object, Plus, SignedInteger, StringType, U32, U64, Unknown, UnsignedInteger, DateTime};
+use crate::tokens::TokenType::{Bool, F32, F64, FloatingPoint, Greater, GreaterEqual, I32, I64, Integer, Less, LessEqual, ListType, MapType, Minus, Object, Plus, SignedInteger, StringType, U32, U64, Unknown, UnsignedInteger, DateTime};
 use log::debug;
 use std::collections::HashMap;
 
@@ -134,7 +134,6 @@ pub fn calculate_type(
             Integer | I64 => I64,
             FloatingPoint => F64,
             Bool => Bool,
-            Date => Date,
             DateTime => DateTime,
             ListType => ListType,
             MapType => MapType,

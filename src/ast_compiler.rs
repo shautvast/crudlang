@@ -5,7 +5,7 @@ use crate::errors::CompilerError::{
 };
 use crate::errors::CompilerErrorAtLine;
 use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, Date, DateTime, Dot, Eof, Eol, Equal, F32, F64, False, FloatingPoint,
+    Bang, Bool, Char, Colon, DateTime, Dot, Eof, Eol, Equal, F32, F64, False, FloatingPoint,
     Fn, Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace,
     LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus,
     Print, RightBrace, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star,

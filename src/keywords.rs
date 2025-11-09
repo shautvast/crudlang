@@ -5,7 +5,7 @@ pub(crate) fn get_keyword(lexeme: &str) -> Option<TokenType> {
         "and" => Some(TokenType::LogicalAnd),
         "bool" => Some(TokenType::Bool),
         "char" => Some(TokenType::Char),
-        "date" => Some(TokenType::Date),
+        "datetime" => Some(TokenType::DateTime),
         "else" => Some(TokenType::Else),
         "false" => Some(TokenType::False),
         "f32" => Some(TokenType::F32),

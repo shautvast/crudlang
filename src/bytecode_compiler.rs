@@ -4,6 +4,7 @@ use crate::chunk::Chunk;
 use crate::errors::{CompilerError, CompilerErrorAtLine, RuntimeError};
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType;
+use crate::tokens::TokenType::Unknown;
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_LIST,
@@ -11,7 +12,6 @@ use crate::vm::{
     OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
 use std::collections::HashMap;
-use crate::tokens::TokenType::Unknown;
 
 pub fn compile(
     qualified_name: Option<&str>,
@@ -220,9 +220,16 @@ impl Compiler {
                     ));
                 }
             }
-            Expression::Variable { name, .. } => {
-                let name_index = self.vars.get(name).unwrap();
-                self.emit_bytes(OP_GET, *name_index as u16);
+            Expression::Variable { name, line,.. } => {
+                let name_index = self.vars.get(name);
+                if let Some(name_index) = name_index {
+                    self.emit_bytes(OP_GET, *name_index as u16);
+                } else {
+                    return Err(CompilerErrorAtLine::raise(
+                        CompilerError::UndeclaredVariable(name.to_string()),
+                        *line,
+                    ));
+                }
             }
             Expression::Literal { value, .. } => {
                 self.emit_constant(value.clone());

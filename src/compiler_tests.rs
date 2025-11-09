@@ -206,7 +206,8 @@ m"#);
     #[test]
     fn date_literal() {
         assert_eq!(
-            run(r#"t"2025-11-09 16:44:28.000 +0100""#),
+            run(r#"let date:datetime = d"2025-11-09 16:44:28.000 +0100"
+date"#),
             Ok(Value::DateTime(
                  DateTime::parse_from_str("2025-11-09 16:44:28.000 +0100", "%Y-%m-%d %H:%M:%S%.3f %z").unwrap().into()
             ))

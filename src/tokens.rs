@@ -28,7 +28,7 @@ pub enum TokenType {
     Char,
     Colon,
     Comma,
-    Date,
+    DateTime,
     Dot,
     Else,
     Eof,
@@ -82,7 +82,6 @@ pub enum TokenType {
     Star,
     StringType,
     True,
-    DateTime,
     U32,
     U64,
     Unknown,
@@ -95,7 +94,7 @@ impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TokenType::StringType => write!(f, "string"),
-            TokenType::Date => write!(f, "date"),
+            TokenType::DateTime => write!(f, "datetime"),
             TokenType::Char => write!(f, "char"),
             TokenType::I32 => write!(f, "i32"),
             TokenType::I64 => write!(f, "i64"),
@@ -181,7 +180,7 @@ impl TokenType {
             | TokenType::F32
             | TokenType::F64
             | TokenType::StringType
-            | TokenType::Date
+            | TokenType::DateTime
             | TokenType::Object
             | TokenType::ListType
             | TokenType::MapType

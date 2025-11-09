@@ -111,10 +111,8 @@ impl Scanner {
                 }
                 '\'' => self.char()?,
                 '"' => self.string()?,
-                't' => {
-                    if self.match_next('"') {
-                        self.datetime()?;
-                    }
+                'd' if self.match_next('"') => {
+                    self.datetime()?;
                 }
                 '\r' | '\t' | ' ' => {}
                 '\n' => {
