@@ -163,14 +163,18 @@ let c = b + "world"
 ```
 
 **dates and time**
-Create a date with
+Create a date literal with
 ```
-let d:date = ""
+let d:date = d"1979-12-16 16:12:19.000 +01:00"
 ```
+
+more date functions will have to follow.
 
 **lists**
 ```
 let list = ["foo", "bar", 1, 1.0]
+print(list[1])
+=> "bar"
 ```
 No generic types (yet). A list can hold any type.
 * lists support appending with + 
