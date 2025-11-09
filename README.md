@@ -163,7 +163,8 @@ let c = b + "world"
 ```
 
 **dates and time**
-Create a date literal with
+
+Create a date with a literal:
 ```
 let d:date = d"1979-12-16 16:12:19.000 +01:00"
 ```

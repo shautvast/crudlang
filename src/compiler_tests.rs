@@ -37,7 +37,7 @@ mod tests {
 
     #[test]
     fn index_in_list_literal() {
-        assert_eq!(run(r#"["abc","def"][0]"#), Ok(Value::String("abc".into())))
+        assert_eq!(run(r#"["abc","def"][1]"#), Ok(Value::String("def".into())))
     }
 
     #[test]

@@ -193,7 +193,7 @@ impl Vm {
                 OP_LIST_GET => {
                     let index_high = self.read(chunk);
                     let index_low = self.read(chunk);
-                    let index = index_high <<16 + index_low;
+                    let index = (index_high <<16) + index_low;
                     let list = self.pop();
                     if let Value::List(list) = list {
                         self.push(list.get(index).cloned().unwrap())
