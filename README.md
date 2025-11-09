@@ -1,5 +1,7 @@
 # crud-lang
 
+![Project Icon](https://claude.ai/public/artifacts/04455622-58f3-4370-9364-3bf91dfb3138)
+
 ## Why?
 1. Existing languages are just fine, but building web services is >always< bolted on, instead of supported out-of-the-box.
 2. Whereas every company needs an API these days. 
@@ -48,7 +50,7 @@ I cherry picked things I like, mostly from rust and python.
   * string: "hello world"
   * uuid , 
   * bool: true, false
-  * char '.'
+  * char '. '
   * object: {field: value}. An object is a map with fixed keys that are strings.
   * enum 
   * date
@@ -99,7 +101,7 @@ fn get(path: string, headers: map, query: map) -> string:
     "hello" + path
 ```
 * includes a rudimentary REPL
-  * ```cargo run -- --repl```)
+  * ```cargo run -- --repl```) 
   * list functions and functions that serve endpoints
   * planned: 
     * edit source files
@@ -143,7 +145,8 @@ let a:u32 = 42
 
 * All variables are mutable right now. Have not come to a decision yet about mutable vs immutable variables.
 * You must declare a variable before using it. Block scoping.
-* There is no ```null```. There is ```void``` though.
+* There is no ```null```.
+There is ```void``` though.
 * You must initialize a variable when declaring it.
 
 **strings**
