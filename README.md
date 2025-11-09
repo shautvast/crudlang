@@ -1,6 +1,6 @@
 # crud-lang
 
-![Project Icon](https://claude.ai/public/artifacts/04455622-58f3-4370-9364-3bf91dfb3138)
+![Project Icon](icon.svg)
 
 ## Why?
 1. Existing languages are just fine, but building web services is >always< bolted on, instead of supported out-of-the-box.
