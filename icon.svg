@@ -1,0 +1,22 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Teepee body -->
+  <path d="M 50 10 L 15 85 L 85 85 Z" fill="#E8D4B8" stroke="#8B6F47" stroke-width="2"/>
+  
+  <!-- Center pole detail -->
+  <line x1="50" y1="10" x2="50" y2="85" stroke="#8B6F47" stroke-width="1.5"/>
+  
+  <!-- Left decorative pattern -->
+  <path d="M 32 45 L 28 60 L 32 60 Z" fill="#C85A54"/>
+  <path d="M 36 55 L 32 70 L 36 70 Z" fill="#C85A54"/>
+  
+  <!-- Right decorative pattern -->
+  <path d="M 68 45 L 72 60 L 68 60 Z" fill="#C85A54"/>
+  <path d="M 64 55 L 68 70 L 64 70 Z" fill="#C85A54"/>
+  
+  <!-- Entrance flap -->
+  <path d="M 45 85 L 50 60 L 55 85 Z" fill="#6B5A47"/>
+  
+  <!-- Top poles sticking out -->
+  <line x1="48" y1="10" x2="45" y2="5" stroke="#8B6F47" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="52" y1="10" x2="55" y2="5" stroke="#8B6F47" stroke-width="1.5" stroke-linecap="round"/>
+</svg>
