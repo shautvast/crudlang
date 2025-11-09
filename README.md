@@ -7,7 +7,7 @@ see https://sesquiotic.com/2013/02/23/teepee/
 Borrowing from that: 'the place where http lives'.
 
 ## Why?
-1. Existing languages are just fine, but building web services is >always< bolted on, instead of supported out-of-the-box.
+1. Existing languages are just fine, but building web services is >always< bolted on, instead of supported within the language/runtime.
 2. Whereas every company needs an API these days. 
 3. Is it just me? I always have trouble mapping urls the code that handles them.
 4. There is no language (AFAIK) that supports layering. (controllers, services, database access, etc). This pattern is ubiquitous (at least where I live). 
@@ -16,7 +16,7 @@ Borrowing from that: 'the place where http lives'.
 7. Yes, you can automatically serve json from postgres or whatever, but that is not the point. We want to build services.
    
 ## Now what?
-- En experimental language for CRUD applications (web api's)
+- An experimental language for web api's.
 - Enterprise as a first-class citizen
   - built-in types for dates and uuid for example
   - collection literals
