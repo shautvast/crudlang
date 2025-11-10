@@ -148,6 +148,21 @@ p"#);
     }
 
     #[test]
+    fn declare_and_instantiate_object_wrong_type() {
+        let r = run(r#"
+object Person:
+   name: string
+
+let p = Person(name: 0x42)
+p"#);
+        assert!(r.is_err());
+        assert_eq!(
+            r#"Compilation failed: error at line 5, Expected string, found integer"#,
+            format!("{}", r.unwrap_err().to_string())
+        );
+    }
+
+    #[test]
     fn literal_map() {
         let result = run(r#"{"name": "Dent", "age": 40 }"#);
         assert!(result.is_ok());

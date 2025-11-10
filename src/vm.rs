@@ -220,11 +220,20 @@ impl Vm {
 
                         if let Some(params) = constructor {
                             if params.len() != args.len() {
-                                return Err(RuntimeError::IllegalArgumentsException(function_name, params.len(), args.len()));
+                                return Err(RuntimeError::IllegalArgumentsException(
+                                    function_name,
+                                    params.len(),
+                                    args.len(),
+                                ));
                             }
 
                             let mut fields = vec![];
-                            params.iter().zip(args.into_iter()).for_each(|(param, arg)| {fields.push((param.name.lexeme.clone(), arg))});
+                            params
+                                .iter()
+                                .zip(args.into_iter())
+                                .for_each(|(param, arg)| {
+                                    fields.push((param.name.lexeme.clone(), arg))
+                                });
                             let new_instance = Value::ObjectType(Box::new(Object {
                                 definition: function_name,
                                 fields,

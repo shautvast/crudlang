@@ -160,21 +160,6 @@ impl Compiler {
         registry: &mut HashMap<String, Chunk>,
     ) -> Result<(), CompilerErrorAtLine> {
         match expression {
-            // Expression::FunctionCall {
-            //     name, arguments, ..
-            // } => {
-            //     let qname = format!("{}.{}", namespace, name);
-            //     let name_index = self
-            //         .chunk
-            //         .find_constant(&qname)
-            //         .unwrap_or_else(|| self.chunk.add_constant(Value::String(qname)));
-            //
-            //     for argument in arguments {
-            //         self.compile_expression(namespace, argument, registry)?;
-            //     }
-            //     self.emit_bytes(OP_CALL, name_index as u16);
-            //     self.emit_byte(arguments.len() as u16);
-            // }
             Expression::FunctionCall {
                 name, arguments, ..
             } => {
@@ -281,7 +266,9 @@ impl Compiler {
                 }
             }
             Expression::Stop { .. } => {}
-            NamedParameter { value,.. } => {self.compile_expression(namespace, value, symbols, registry)?}
+            NamedParameter { value, .. } => {
+                self.compile_expression(namespace, value, symbols, registry)?
+            }
             Expression::ListGet { index, list } => {
                 self.compile_expression(namespace, list, symbols, registry)?;
                 self.compile_expression(namespace, index, symbols, registry)?;
@@ -305,10 +292,15 @@ impl Compiler {
     ) -> Result<(), CompilerErrorAtLine> {
         for parameter in parameters {
             for argument in arguments {
-                if let NamedParameter { name, .. } = argument {
+                if let NamedParameter { name, value, .. } = argument {
                     if name.lexeme == parameter.name.lexeme {
-                        self.compile_expression(namespace, argument, symbols, registry)?;
-                        break;
+                        let value_type = infer_type(value, symbols);
+                        if parameter.var_type != value_type {
+                            return Err(CompilerErrorAtLine::raise(CompilerError::IncompatibleTypes(parameter.var_type.clone(), value_type), argument.line()));
+                        } else {
+                            self.compile_expression(namespace, argument, symbols, registry)?;
+                            break;
+                        }
                     }
                 } else {
                     self.compile_expression(namespace, argument, symbols, registry)?;
