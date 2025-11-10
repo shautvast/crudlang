@@ -1,37 +1,16 @@
-use crate::value::Value;
 use std::collections::HashMap;
-use std::sync::LazyLock;
+use crate::builtins::builtin_functions::{insert, MethodMap};
 use crate::errors::RuntimeError;
+use crate::value::Value;
 
-type MethodFn = fn(Value, Vec<Value>) -> Result<Value, RuntimeError>;
-type MethodMap = HashMap<String, MethodFn>;
-type MethodTable = HashMap<String, MethodMap>;
-
-const METHODS: LazyLock<MethodTable> = LazyLock::new(|| {
-    let mut table: MethodTable = HashMap::new();
-
+pub(crate) fn string_methods() -> MethodMap {
     let mut string_methods: MethodMap = HashMap::new();
-    string_methods.insert("len".to_string(), string_len);
-    string_methods.insert("to_uppercase".to_string(), string_to_uppercase);
-    string_methods.insert("contains".to_string(), string_contains);
-    string_methods.insert("reverse".to_string(), string_reverse);
-
-    table.insert("string".to_string(), string_methods);
-
-    table
-});
-
-pub fn call_builtin(
-    type_name: &str,
-    method_name: &str,
-    self_val: Value,
-    args: Vec<Value>,
-) -> Result<Value, RuntimeError> {
-    METHODS
-        .get(type_name)
-        .and_then(|methods| methods.get(method_name))
-        .ok_or_else(|| RuntimeError::FunctionNotFound(format!("{}.{}",type_name, method_name)))?
-        (self_val, args)
+    let m = &mut string_methods;
+    insert(m, "len", string_len);
+    insert(m, "to_uppercase", string_to_uppercase);
+    insert(m, "contains", string_contains);
+    insert(m, "reverse", string_reverse);
+    string_methods
 }
 
 fn string_len(self_val: Value, _args: Vec<Value>) -> Result<Value, RuntimeError> {
@@ -56,6 +35,7 @@ fn string_contains(self_val: Value, args: Vec<Value>) -> Result<Value, RuntimeEr
         _ => Err(RuntimeError::ExpectedType("string".to_string())),
     }
 }
+
 fn string_reverse(self_val: Value, _: Vec<Value>) -> Result<Value, RuntimeError> {
     match self_val {
         Value::String(s) => {

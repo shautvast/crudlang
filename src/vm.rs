@@ -7,7 +7,7 @@ use arc_swap::Guard;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
-use crate::builtin_functions::call_builtin;
+use crate::builtins::builtin_functions::call_builtin;
 
 pub struct Vm {
     ip: usize,

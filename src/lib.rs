@@ -23,7 +23,7 @@ mod symbol_builder;
 mod tokens;
 mod value;
 pub mod vm;
-mod builtin_functions;
+mod builtins;
 
 pub fn compile_sourcedir(source_dir: &str) -> Result<HashMap<String, Chunk>, CrudLangError> {
     let mut registry = HashMap::new();
