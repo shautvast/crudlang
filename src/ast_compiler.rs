@@ -17,10 +17,14 @@ use crate::value::Value;
 use log::debug;
 use std::collections::HashMap;
 
+type SymbolTable = HashMap<String, Symbol>;
+type Expr = Result<Expression, CompilerErrorAtLine>;
+type Stmt = Result<Statement, CompilerErrorAtLine>;
+
 pub fn compile(
     path: Option<&str>,
     tokens: Vec<Token>,
-    symbol_table: &mut HashMap<String, Symbol>,
+    symbol_table: &mut SymbolTable,
 ) -> Result<Vec<Statement>, CompilerErrorAtLine> {
     let mut compiler = AstCompiler::new(path.unwrap_or(""), tokens);
     compiler.compile_tokens(symbol_table)
@@ -65,7 +69,7 @@ impl AstCompiler {
 
     fn compile(
         &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
+        symbol_table: &mut SymbolTable,
     ) -> Result<Vec<Statement>, CompilerErrorAtLine> {
         self.current_line();
         if !self.had_error {
@@ -91,7 +95,7 @@ impl AstCompiler {
 
     fn indent(
         &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
+        symbol_table: &mut SymbolTable,
     ) -> Result<Option<Statement>, CompilerErrorAtLine> {
         let expected_indent = *self.indent.last().unwrap();
         // skip empty lines
@@ -114,10 +118,7 @@ impl AstCompiler {
         }
     }
 
-    fn declaration(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Statement, CompilerErrorAtLine> {
+    fn declaration(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
         if self.match_token(vec![Fn]) {
             self.function_declaration(symbol_table)
         } else if self.match_token(vec![Let]) {
@@ -134,19 +135,13 @@ impl AstCompiler {
     //  | /. -> service.get_all()
     //  | /{uuid} -> service.get(uuid)?
     //  | ?{query.firstname} -> service.get_by_firstname(fname)?
-    fn guard_declaration(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Statement, CompilerErrorAtLine> {
+    fn guard_declaration(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
         let if_expr = self.guard_if_expr(symbol_table)?;
         let then_expr = self.expression(symbol_table)?;
         Ok(Statement::GuardStatement { if_expr, then_expr })
     }
 
-    fn guard_if_expr(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn guard_if_expr(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         while !self.check(SingleRightArrow) {
             if self.match_token(vec![Slash]) {
                 return self.path_guard_expr();
@@ -161,10 +156,7 @@ impl AstCompiler {
         })
     }
 
-    fn query_guard_expr(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn query_guard_expr(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         if self.match_token(vec![LeftBrace]) {
             let query_params = self.expression(symbol_table)?;
             self.consume(RightBrace, Expected("'}' after guard expression."))?;
@@ -176,7 +168,7 @@ impl AstCompiler {
         }
     }
 
-    fn path_guard_expr(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+    fn path_guard_expr(&mut self) -> Expr {
         if self.match_token(vec![LeftBrace]) {
             let path_params = self.match_expression()?;
             self.consume(RightBrace, Expected("'}' after guard expression."))?;
@@ -188,14 +180,11 @@ impl AstCompiler {
         }
     }
 
-    fn match_expression(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+    fn match_expression(&mut self) -> Expr {
         Err(self.raise(Expected("unimplemented")))
     }
 
-    fn object_declaration(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Statement, CompilerErrorAtLine> {
+    fn object_declaration(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
         let type_name = self.consume(Identifier, Expected("object name."))?;
         self.consume(Colon, Expected("':' after object name."))?;
         self.consume(Eol, Expected("end of line."))?;
@@ -244,10 +233,7 @@ impl AstCompiler {
         })
     }
 
-    fn function_declaration(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Statement, CompilerErrorAtLine> {
+    fn function_declaration(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
         let name_token = self.consume(Identifier, Expected("function name."))?;
         self.consume(LeftParen, Expected("'(' after function name."))?;
         let mut parameters = vec![];
@@ -294,10 +280,7 @@ impl AstCompiler {
         Ok(Statement::FunctionStmt { function })
     }
 
-    fn let_declaration(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Statement, CompilerErrorAtLine> {
+    fn let_declaration(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
         if self.peek().token_type.is_type() {
             return Err(self.raise(CompilerError::KeywordNotAllowedAsIdentifier(
                 self.peek().token_type.clone(),
@@ -338,10 +321,7 @@ impl AstCompiler {
         }
     }
 
-    fn statement(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Statement, CompilerErrorAtLine> {
+    fn statement(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
         if self.match_token(vec![Print]) {
             self.print_statement(symbol_table)
         } else {
@@ -349,19 +329,13 @@ impl AstCompiler {
         }
     }
 
-    fn print_statement(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Statement, CompilerErrorAtLine> {
+    fn print_statement(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
         let expr = self.expression(symbol_table)?;
         self.consume(Eol, Expected("end of line after print statement."))?;
         Ok(Statement::PrintStmt { value: expr })
     }
 
-    fn expr_statement(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Statement, CompilerErrorAtLine> {
+    fn expr_statement(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
         let expr = self.expression(symbol_table)?;
         if !self.is_at_end() {
             self.consume(Eol, Expected("end of line after expression."))?;
@@ -369,57 +343,36 @@ impl AstCompiler {
         Ok(Statement::ExpressionStmt { expression: expr })
     }
 
-    fn expression(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn expression(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         self.or(symbol_table)
     }
 
-    fn or(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn or(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.and(symbol_table)?;
         self.binary(vec![TokenType::LogicalOr], expr, symbol_table)
     }
 
-    fn and(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn and(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.bit_and(symbol_table)?;
         self.binary(vec![TokenType::LogicalAnd], expr, symbol_table)
     }
 
-    fn bit_and(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn bit_and(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.bit_or(symbol_table)?;
         self.binary(vec![TokenType::BitAnd], expr, symbol_table)
     }
 
-    fn bit_or(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn bit_or(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.bit_xor(symbol_table)?;
         self.binary(vec![TokenType::Pipe], expr, symbol_table)
     }
 
-    fn bit_xor(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn bit_xor(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.equality(symbol_table)?;
         self.binary(vec![TokenType::BitXor], expr, symbol_table)
     }
 
-    fn equality(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn equality(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.comparison(symbol_table)?;
         self.binary(
             vec![TokenType::EqualEqual, TokenType::BangEqual],
@@ -428,10 +381,7 @@ impl AstCompiler {
         )
     }
 
-    fn comparison(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn comparison(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.bitshift(symbol_table)?;
         self.binary(
             vec![Greater, GreaterEqual, Less, LessEqual],
@@ -440,26 +390,17 @@ impl AstCompiler {
         )
     }
 
-    fn bitshift(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn bitshift(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.term(symbol_table)?;
         self.binary(vec![GreaterGreater, LessLess], expr, symbol_table)
     }
 
-    fn term(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn term(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.factor(symbol_table)?;
         self.binary(vec![Minus, Plus], expr, symbol_table)
     }
 
-    fn factor(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn factor(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.unary(symbol_table)?;
         self.binary(vec![Slash, Star], expr, symbol_table)
     }
@@ -468,8 +409,8 @@ impl AstCompiler {
         &mut self,
         types: Vec<TokenType>,
         mut expr: Expression,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+        symbol_table: &mut SymbolTable,
+    ) -> Expr {
         while self.match_token(types.clone()) {
             let operator = self.previous().clone();
             let right = self.comparison(symbol_table)?;
@@ -483,10 +424,7 @@ impl AstCompiler {
         Ok(expr)
     }
 
-    fn unary(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn unary(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         if self.match_token(vec![Bang, Minus]) {
             let operator = self.previous().clone();
             let right = self.unary(symbol_table)?;
@@ -501,10 +439,7 @@ impl AstCompiler {
         }
     }
 
-    fn get(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn get(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.primary(symbol_table)?;
 
         if self.match_token(vec![LeftParen]) {
@@ -523,11 +458,7 @@ impl AstCompiler {
         }
     }
 
-    fn index(
-        &mut self,
-        operand: Expression,
-        index: Expression,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn index(&mut self, operand: Expression, index: Expression) -> Expr {
         let get = match &operand {
             Expression::Map { .. } => MapGet {
                 map: Box::new(operand),
@@ -561,8 +492,8 @@ impl AstCompiler {
         &mut self,
         receiver: Expression,
         op: Token,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+        symbol_table: &mut SymbolTable,
+    ) -> Expr {
         if self.match_token(vec![LeftParen]) {
             let arguments = self.arguments(symbol_table)?;
             Ok(MethodCall {
@@ -576,14 +507,11 @@ impl AstCompiler {
             Ok(FieldGet {
                 receiver: Box::new(receiver.clone()),
                 field: op.lexeme.clone(),
-             })
+            })
         }
     }
 
-    fn primary(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn primary(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         Ok(if self.match_token(vec![LeftBracket]) {
             self.list(symbol_table)?
         } else if self.match_token(vec![LeftBrace]) {
@@ -685,11 +613,7 @@ impl AstCompiler {
         })
     }
 
-    fn named_parameter(
-        &mut self,
-        name: &Token,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn named_parameter(&mut self, name: &Token, symbol_table: &mut SymbolTable) -> Expr {
         let value = self.expression(symbol_table)?;
         let line = name.line;
         Ok(NamedParameter {
@@ -699,10 +623,7 @@ impl AstCompiler {
         })
     }
 
-    fn list(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn list(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let mut list = vec![];
         while !self.match_token(vec![RightBracket]) {
             list.push(self.expression(symbol_table)?);
@@ -720,10 +641,7 @@ impl AstCompiler {
         })
     }
 
-    fn map(
-        &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn map(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let mut entries = vec![];
         while !self.match_token(vec![RightBrace]) {
             let key = self.expression(symbol_table)?;
@@ -744,11 +662,7 @@ impl AstCompiler {
         })
     }
 
-    fn variable_lookup(
-        &mut self,
-        name: &Token,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn variable_lookup(&mut self, name: &Token, symbol_table: &mut SymbolTable) -> Expr {
         let var = symbol_table.get(&name.lexeme);
         let var_type = if let Some(Symbol::Variable { var_type, .. }) = var {
             var_type
@@ -762,11 +676,7 @@ impl AstCompiler {
         })
     }
 
-    fn function_call(
-        &mut self,
-        name: Token,
-        symbol_table: &mut HashMap<String, Symbol>,
-    ) -> Result<Expression, CompilerErrorAtLine> {
+    fn function_call(&mut self, name: Token, symbol_table: &mut SymbolTable) -> Expr {
         let arguments = self.arguments(symbol_table)?;
         Ok(FunctionCall {
             line: self.peek().line,
@@ -777,7 +687,7 @@ impl AstCompiler {
 
     fn arguments(
         &mut self,
-        symbol_table: &mut HashMap<String, Symbol>,
+        symbol_table: &mut SymbolTable,
     ) -> Result<Vec<Expression>, CompilerErrorAtLine> {
         let mut arguments = vec![];
         while !self.match_token(vec![RightParen]) {
@@ -978,7 +888,7 @@ impl Expression {
             Self::Map { line, .. } => *line,
             Variable { line, .. } => *line,
             FunctionCall { line, .. } => *line,
-            MethodCall {line,..} => *line,
+            MethodCall { line, .. } => *line,
             Stop { line } => *line,
             NamedParameter { line, .. } => *line,
             MapGet { .. } => 0,
