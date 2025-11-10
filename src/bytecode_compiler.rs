@@ -110,12 +110,11 @@ impl Compiler {
                 let var = symbols.get(name);
                 if let Some(Symbol::Variable {
                     var_type,
-                    initializer,
                     ..
                 }) = var
                 {
                     let inferred_type = infer_type(initializer, symbols);
-                    let calculated_type = calculate_type(var_type, &inferred_type, symbols)
+                    let calculated_type = calculate_type(var_type, &inferred_type)
                         .map_err(|e| CompilerErrorAtLine::raise(e, statement.line()))?;
                     if var_type != &Unknown && var_type != &calculated_type {
                         return Err(CompilerErrorAtLine::raise(
@@ -298,8 +297,8 @@ impl Compiler {
             NamedParameter { .. } => {}
             Expression::ListGet { index, list} => {
                 self.compile_expression(namespace, list, symbols, registry)?;
+                self.compile_expression(namespace, index, symbols, registry)?;
                 self.emit_byte(OP_LIST_GET);
-                self.emit_bytes((index >> 16) as u16, *index as u16);
             }
             Expression::MapGet { .. } => {}
             Expression::FieldGet { .. } => {}

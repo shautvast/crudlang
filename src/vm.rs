@@ -3,11 +3,11 @@ use crate::errors::RuntimeError::Something;
 use crate::errors::{RuntimeError, ValueError};
 use crate::tokens::TokenType;
 use crate::value::Value;
-use axum::http::{Uri};
+use arc_swap::Guard;
+use axum::http::Uri;
+use reqwest::get;
 use std::collections::HashMap;
 use std::sync::Arc;
-use arc_swap::Guard;
-use reqwest::get;
 use tracing::debug;
 
 pub struct Vm {
@@ -18,7 +18,10 @@ pub struct Vm {
     registry: Arc<HashMap<String, Chunk>>,
 }
 
-pub fn interpret(registry: Guard<Arc<HashMap<String, Chunk>>>, function: &str) -> Result<Value, RuntimeError> {
+pub fn interpret(
+    registry: Guard<Arc<HashMap<String, Chunk>>>,
+    function: &str,
+) -> Result<Value, RuntimeError> {
     let chunk = registry.get(function).unwrap().clone();
     // for (key,value) in registry.iter() {
     //     println!("{}", key);
@@ -191,12 +194,10 @@ impl Vm {
                     self.push(value.clone()); // not happy , take ownership, no clone
                 }
                 OP_LIST_GET => {
-                    let index_high = self.read(chunk);
-                    let index_low = self.read(chunk);
-                    let index = (index_high <<16) + index_low;
+                    let index = self.pop();
                     let list = self.pop();
                     if let Value::List(list) = list {
-                        self.push(list.get(index).cloned().unwrap())
+                        self.push(list.get(index.cast_usize()?).cloned().unwrap())
                     }
                 }
                 OP_CALL => {
@@ -211,7 +212,9 @@ impl Vm {
                     args.reverse();
 
                     let function_name = chunk.constants[function_name_index].to_string();
-                    let function_chunk = self.registry.get(&function_name)
+                    let function_chunk = self
+                        .registry
+                        .get(&function_name)
                         .or_else(|| self.registry.get(&format!("{}/{}", context, function_name)));
                     if function_chunk.is_none() {
                         return Err(RuntimeError::FunctionNotFound(function_name));

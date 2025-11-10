@@ -57,6 +57,18 @@ impl Value {
         }
     }
 
+    pub fn cast_usize(self) -> Result<usize, ValueError> {
+        match self {
+            Value::U32(v) => Ok(v as usize),
+            Value::U64(v) => Ok(v as usize),
+            Value::I32(v) => Ok(v as usize),
+            Value::I64(v) => Ok(v as usize),
+            Value::F32(v) => Ok(v as usize),
+            Value::F64(v) => Ok(v as usize),
+            _ => Err(ValueError::IllegalCast),
+        }
+    }
+
     pub fn cast_i32(self) -> Result<Self, ValueError> {
         match self {
             Value::U32(v) => Ok(Value::I32(v as i32)),
@@ -229,7 +241,7 @@ impl Add<&Value> for &Value {
                 (Value::String(s), Value::Bool(b)) => Ok(Value::String(format!("{}{}", s, b))),
                 (Value::String(s), Value::Char(c)) => Ok(Value::String(format!("{}{}", s, c))),
                 (Value::String(s1), Value::String(s2)) => {
-                    let mut s = String::with_capacity(s1.len()+s2.len());
+                    let mut s = String::with_capacity(s1.len() + s2.len());
                     s.push_str(s1.as_str());
                     s.push_str(s2.as_str());
                     Ok(Value::String(s))

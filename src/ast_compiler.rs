@@ -2,28 +2,30 @@ use crate::ast_compiler::Expression::{
     FieldGet, FunctionCall, ListGet, MapGet, NamedParameter, Stop, Variable,
 };
 use crate::errors::CompilerError::{
-    self, Expected, IncompatibleTypes, ParseError, TooManyParameters, TypeError,
-    UndeclaredVariable, UnexpectedIndent, UninitializedVariable,
+    self, Expected, ParseError, TooManyParameters, UndeclaredVariable, UnexpectedIndent,
+    UninitializedVariable,
 };
 use crate::errors::CompilerErrorAtLine;
+use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType::{
     Bang, Bool, Char, Colon, DateTime, Dot, Eof, Eol, Equal, F32, F64, False, FloatingPoint, Fn,
     Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace,
     LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus,
     Print, RightBrace, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star,
-    StringType, True, U32, U64, UnsignedInteger,
+    StringType, True, U32, U64, Unknown, UnsignedInteger,
 };
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use log::debug;
-use tokio_postgres::fallible_iterator::FallibleIterator;
+use std::collections::HashMap;
 
 pub fn compile(
     path: Option<&str>,
     tokens: Vec<Token>,
+    symbol_table: &mut HashMap<String, Symbol>,
 ) -> Result<Vec<Statement>, CompilerErrorAtLine> {
     let mut compiler = AstCompiler::new(path.unwrap_or(""), tokens);
-    compiler.compile_tokens()
+    compiler.compile_tokens(symbol_table)
 }
 
 #[derive(Debug, Clone)]
@@ -55,17 +57,23 @@ impl AstCompiler {
         self.current = 0;
     }
 
-    fn compile_tokens(&mut self) -> Result<Vec<Statement>, CompilerErrorAtLine> {
+    fn compile_tokens(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Vec<Statement>, CompilerErrorAtLine> {
         self.reset();
-        self.compile()
+        self.compile(symbol_table)
     }
 
-    fn compile(&mut self) -> Result<Vec<Statement>, CompilerErrorAtLine> {
+    fn compile(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Vec<Statement>, CompilerErrorAtLine> {
         self.current_line();
         if !self.had_error {
             let mut statements = vec![];
             while !self.is_at_end() {
-                let statement = self.indent()?;
+                let statement = self.indent(symbol_table)?;
                 if let Some(statement) = statement {
                     statements.push(statement);
                 } else {
@@ -83,7 +91,10 @@ impl AstCompiler {
         CompilerErrorAtLine::raise(error, self.current_line())
     }
 
-    fn indent(&mut self) -> Result<Option<Statement>, CompilerErrorAtLine> {
+    fn indent(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Option<Statement>, CompilerErrorAtLine> {
         let expected_indent = *self.indent.last().unwrap();
         // skip empty lines
         while self.check(Eol) {
@@ -101,39 +112,48 @@ impl AstCompiler {
             self.indent.pop();
             return Ok(None);
         } else {
-            Ok(Some(self.declaration()?))
+            Ok(Some(self.declaration(symbol_table)?))
         }
     }
 
-    fn declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
+    fn declaration(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Statement, CompilerErrorAtLine> {
         if self.match_token(vec![Fn]) {
-            self.function_declaration()
+            self.function_declaration(symbol_table)
         } else if self.match_token(vec![Let]) {
-            self.let_declaration()
+            self.let_declaration(symbol_table)
         } else if self.match_token(vec![Object]) {
             self.object_declaration()
         } else if self.match_token(vec![TokenType::Pipe]) {
-            self.guard_declaration()
+            self.guard_declaration(symbol_table)
         } else {
-            self.statement()
+            self.statement(symbol_table)
         }
     }
 
     //  | /. -> service.get_all()
     //  | /{uuid} -> service.get(uuid)?
     //  | ?{query.firstname} -> service.get_by_firstname(fname)?
-    fn guard_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
-        let if_expr = self.guard_if_expr()?;
-        let then_expr = self.expression()?;
+    fn guard_declaration(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Statement, CompilerErrorAtLine> {
+        let if_expr = self.guard_if_expr(symbol_table)?;
+        let then_expr = self.expression(symbol_table)?;
         Ok(Statement::GuardStatement { if_expr, then_expr })
     }
 
-    fn guard_if_expr(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+    fn guard_if_expr(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
         while !self.check(SingleRightArrow) {
             if self.match_token(vec![Slash]) {
                 return self.path_guard_expr();
             } else if self.match_token(vec![TokenType::Question]) {
-                return self.query_guard_expr();
+                return self.query_guard_expr(symbol_table);
             } else {
                 return Err(self.raise(Expected("-> or ?")));
             }
@@ -143,9 +163,12 @@ impl AstCompiler {
         })
     }
 
-    fn query_guard_expr(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+    fn query_guard_expr(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
         if self.match_token(vec![LeftBrace]) {
-            let query_params = self.expression()?;
+            let query_params = self.expression(symbol_table)?;
             self.consume(RightBrace, Expected("'}' after guard expression."))?;
             Ok(query_params)
         } else {
@@ -211,7 +234,10 @@ impl AstCompiler {
         })
     }
 
-    fn function_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
+    fn function_declaration(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Statement, CompilerErrorAtLine> {
         let name_token = self.consume(Identifier, Expected("function name."))?;
         self.consume(LeftParen, Expected("'(' after function name."))?;
         let mut parameters = vec![];
@@ -246,7 +272,7 @@ impl AstCompiler {
         let current_indent = self.indent.last().unwrap();
         self.indent.push(current_indent + 1);
 
-        let body = self.compile()?;
+        let body = self.compile(symbol_table)?;
 
         let function = Function {
             name: name_token.clone(),
@@ -258,7 +284,10 @@ impl AstCompiler {
         Ok(Statement::FunctionStmt { function })
     }
 
-    fn let_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
+    fn let_declaration(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Statement, CompilerErrorAtLine> {
         if self.peek().token_type.is_type() {
             return Err(self.raise(CompilerError::KeywordNotAllowedAsIdentifier(
                 self.peek().token_type.clone(),
@@ -274,25 +303,24 @@ impl AstCompiler {
         };
 
         if self.match_token(vec![Equal]) {
-            let initializer = self.expression()?;
+            let initializer = self.expression(symbol_table)?;
+            let declared_type = declared_type.unwrap_or(Unknown);
+            let inferred_type = initializer.infer_type();
+            let var_type =
+                calculate_type(&declared_type, &inferred_type).map_err(|e| self.raise(e))?;
+            symbol_table.insert(
+                name_token.lexeme.clone(),
+                Symbol::Variable {
+                    name: name_token.lexeme.clone(),
+                    var_type: var_type.clone(),
+                },
+            );
+
             self.consume(Eol, Expected("end of line after initializer."))?;
 
-            // let inferred_type = initializer.infer_type();
-            // let var_type = match calculate_type(declared_type, inferred_type) {
-            //     Ok(var_type) => var_type,
-            //     Err(e) => {
-            //         self.had_error = true;
-            //         return Err(self.raise(TypeError(Box::new(e))));
-            //     }
-            // };
-            // self.vars.push(Variable {
-            //     name: name_token.lexeme.to_string(),
-            //     var_type,
-            //     line: name_token.line,
-            // });
             Ok(Statement::VarStmt {
                 name: name_token,
-                var_type: declared_type.unwrap_or(TokenType::Unknown),
+                var_type,
                 initializer,
             })
         } else {
@@ -300,90 +328,141 @@ impl AstCompiler {
         }
     }
 
-    fn statement(&mut self) -> Result<Statement, CompilerErrorAtLine> {
+    fn statement(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Statement, CompilerErrorAtLine> {
         if self.match_token(vec![Print]) {
-            self.print_statement()
+            self.print_statement(symbol_table)
         } else {
-            self.expr_statement()
+            self.expr_statement(symbol_table)
         }
     }
 
-    fn print_statement(&mut self) -> Result<Statement, CompilerErrorAtLine> {
-        let expr = self.expression()?;
+    fn print_statement(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Statement, CompilerErrorAtLine> {
+        let expr = self.expression(symbol_table)?;
         self.consume(Eol, Expected("end of line after print statement."))?;
         Ok(Statement::PrintStmt { value: expr })
     }
 
-    fn expr_statement(&mut self) -> Result<Statement, CompilerErrorAtLine> {
-        let expr = self.expression()?;
+    fn expr_statement(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Statement, CompilerErrorAtLine> {
+        let expr = self.expression(symbol_table)?;
         if !self.is_at_end() {
             self.consume(Eol, Expected("end of line after expression."))?;
         }
         Ok(Statement::ExpressionStmt { expression: expr })
     }
 
-    fn expression(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        self.or()
+    fn expression(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        self.or(symbol_table)
     }
 
-    fn or(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.and()?;
-        self.binary(vec![TokenType::LogicalOr], expr)
+    fn or(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.and(symbol_table)?;
+        self.binary(vec![TokenType::LogicalOr], expr, symbol_table)
     }
 
-    fn and(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.bit_and()?;
-        self.binary(vec![TokenType::LogicalAnd], expr)
+    fn and(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.bit_and(symbol_table)?;
+        self.binary(vec![TokenType::LogicalAnd], expr, symbol_table)
     }
 
-    fn bit_and(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.bit_or()?;
-        self.binary(vec![TokenType::BitAnd], expr)
+    fn bit_and(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.bit_or(symbol_table)?;
+        self.binary(vec![TokenType::BitAnd], expr, symbol_table)
     }
 
-    fn bit_or(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.bit_xor()?;
-        self.binary(vec![TokenType::Pipe], expr)
+    fn bit_or(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.bit_xor(symbol_table)?;
+        self.binary(vec![TokenType::Pipe], expr, symbol_table)
     }
 
-    fn bit_xor(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.equality()?;
-        self.binary(vec![TokenType::BitXor], expr)
+    fn bit_xor(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.equality(symbol_table)?;
+        self.binary(vec![TokenType::BitXor], expr, symbol_table)
     }
 
-    fn equality(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.comparison()?;
-        self.binary(vec![TokenType::EqualEqual, TokenType::BangEqual], expr)
+    fn equality(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.comparison(symbol_table)?;
+        self.binary(
+            vec![TokenType::EqualEqual, TokenType::BangEqual],
+            expr,
+            symbol_table,
+        )
     }
 
-    fn comparison(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.bitshift()?;
-        self.binary(vec![Greater, GreaterEqual, Less, LessEqual], expr)
+    fn comparison(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.bitshift(symbol_table)?;
+        self.binary(
+            vec![Greater, GreaterEqual, Less, LessEqual],
+            expr,
+            symbol_table,
+        )
     }
 
-    fn bitshift(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.term()?;
-        self.binary(vec![GreaterGreater, LessLess], expr)
+    fn bitshift(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.term(symbol_table)?;
+        self.binary(vec![GreaterGreater, LessLess], expr, symbol_table)
     }
 
-    fn term(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.factor()?;
-        self.binary(vec![Minus, Plus], expr)
+    fn term(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.factor(symbol_table)?;
+        self.binary(vec![Minus, Plus], expr, symbol_table)
     }
 
-    fn factor(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.unary()?;
-        self.binary(vec![Slash, Star], expr)
+    fn factor(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.unary(symbol_table)?;
+        self.binary(vec![Slash, Star], expr, symbol_table)
     }
 
     fn binary(
         &mut self,
         types: Vec<TokenType>,
         mut expr: Expression,
+        symbol_table: &mut HashMap<String, Symbol>,
     ) -> Result<Expression, CompilerErrorAtLine> {
         while self.match_token(types.clone()) {
             let operator = self.previous().clone();
-            let right = self.comparison()?;
+            let right = self.comparison(symbol_table)?;
             expr = Expression::Binary {
                 line: operator.line,
                 left: Box::new(expr),
@@ -394,33 +473,38 @@ impl AstCompiler {
         Ok(expr)
     }
 
-    fn unary(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+    fn unary(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
         if self.match_token(vec![Bang, Minus]) {
             let operator = self.previous().clone();
-            let right = self.unary()?;
+            let right = self.unary(symbol_table)?;
             Ok(Expression::Unary {
                 line: self.peek().line,
                 operator,
                 right: Box::new(right),
             })
         } else {
-            let expr = self.get();
+            let expr = self.get(symbol_table);
             expr
         }
     }
 
-    fn get(&mut self) -> Result<Expression, CompilerErrorAtLine> {
-        let expr = self.primary()?;
+    fn get(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let expr = self.primary(symbol_table)?;
 
         if self.match_token(vec![LeftParen]) {
             let name = self.peek().clone();
             self.advance();
-            self.function_call(name)
+            self.function_call(name, symbol_table)
         } else if self.match_token(vec![LeftBracket]) {
-            let name = self.peek().clone();
-            self.advance();
-            self.index(expr, name)
-        } else if self.match_token(vec![Dot]){
+            let index = self.expression(symbol_table)?;
+            self.index(expr, index)
+        } else if self.match_token(vec![Dot]) {
             let name = self.peek().clone();
             self.advance();
             self.field(expr, name)
@@ -432,19 +516,27 @@ impl AstCompiler {
     fn index(
         &mut self,
         operand: Expression,
-        index: Token,
+        index: Expression,
     ) -> Result<Expression, CompilerErrorAtLine> {
-        let get = (match operand {
+        let get = (match &operand {
             Expression::Map { .. } => MapGet {
-                key: index.lexeme.clone(),
+                key: Box::new(index),
             },
             Expression::List { .. } => ListGet {
                 list: Box::new(operand),
-                index: index.lexeme.clone().parse().map_err(|_| {
-                    self.raise(CompilerError::IllegalTypeToIndex(index.lexeme.clone()))
-                })?,
+                index: Box::new(index),
             },
-            _ => return Err(self.raise(CompilerError::IllegalTypeToIndex("".to_string()))),
+            Variable { var_type, .. } => {
+                if var_type == &ListType {
+                    ListGet {
+                        list: Box::new(operand),
+                        index: Box::new(index),
+                    }
+                } else {
+                    return Err(self.raise(CompilerError::IllegalTypeToIndex(var_type.to_string())));
+                }
+            }
+            _ => return Err(self.raise(CompilerError::IllegalTypeToIndex("Unknown".to_string()))),
         });
         self.consume(RightBracket, Expected("']' after index."))?;
         Ok(get)
@@ -461,12 +553,15 @@ impl AstCompiler {
         })
     }
 
-    fn primary(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+    fn primary(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
         debug!("primary {:?}", self.peek());
         Ok(if self.match_token(vec![LeftBracket]) {
-            self.list()?
+            self.list(symbol_table)?
         } else if self.match_token(vec![LeftBrace]) {
-            self.map()?
+            self.map(symbol_table)?
         } else if self.match_token(vec![False]) {
             Expression::Literal {
                 line: self.peek().line,
@@ -545,7 +640,7 @@ impl AstCompiler {
                 ),
             }
         } else if self.match_token(vec![LeftParen]) {
-            let expr = self.expression()?;
+            let expr = self.expression(symbol_table)?;
             self.consume(RightParen, Expected("')' after expression."))?;
             Expression::Grouping {
                 line: self.peek().line,
@@ -556,9 +651,9 @@ impl AstCompiler {
             debug!("{:?}", token);
             // function call?
             if self.match_token(vec![LeftParen]) {
-                self.function_call(token.clone())?
+                self.function_call(token.clone(), symbol_table)?
             } else if self.match_token(vec![Colon]) {
-                self.named_parameter(&token)?
+                self.named_parameter(&token, symbol_table)?
             } else {
                 // } else if self.check(Dot) {
                 // chain of variable or function lookups?
@@ -586,13 +681,17 @@ impl AstCompiler {
                 // }
                 // } else {
                 // none of the above, must be a variable lookup
-                self.variable_lookup(&token)?
+                self.variable_lookup(&token, symbol_table)?
             }
         })
     }
 
-    fn named_parameter(&mut self, name: &Token) -> Result<Expression, CompilerErrorAtLine> {
-        let value = self.expression()?;
+    fn named_parameter(
+        &mut self,
+        name: &Token,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let value = self.expression(symbol_table)?;
         let line = name.line;
         Ok(NamedParameter {
             name: name.clone(),
@@ -601,10 +700,13 @@ impl AstCompiler {
         })
     }
 
-    fn list(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+    fn list(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
         let mut list = vec![];
         while !self.match_token(vec![RightBracket]) {
-            list.push(self.expression()?);
+            list.push(self.expression(symbol_table)?);
             if self.peek().token_type == TokenType::Comma {
                 self.advance();
             } else {
@@ -619,12 +721,15 @@ impl AstCompiler {
         })
     }
 
-    fn map(&mut self) -> Result<Expression, CompilerErrorAtLine> {
+    fn map(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
         let mut entries = vec![];
         while !self.match_token(vec![RightBrace]) {
-            let key = self.expression()?;
+            let key = self.expression(symbol_table)?;
             self.consume(Colon, Expected("':' after map key."))?;
-            let value = self.expression()?;
+            let value = self.expression(symbol_table)?;
             entries.push((key, value));
             if self.peek().token_type == TokenType::Comma {
                 self.advance();
@@ -640,21 +745,35 @@ impl AstCompiler {
         })
     }
 
-    fn variable_lookup(&mut self, name: &Token) -> Result<Expression, CompilerErrorAtLine> {
+    fn variable_lookup(
+        &mut self,
+        name: &Token,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
+        let var = symbol_table.get(&name.lexeme);
+        let var_type = if let Some(Symbol::Variable { var_type, .. }) = var {
+            var_type
+        } else {
+            &Unknown
+        };
         Ok(Variable {
             name: name.lexeme.to_string(),
-            var_type: TokenType::Unknown,
+            var_type: var_type.clone(),
             line: name.line,
         })
     }
 
-    fn function_call(&mut self, name: Token) -> Result<Expression, CompilerErrorAtLine> {
+    fn function_call(
+        &mut self,
+        name: Token,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Expression, CompilerErrorAtLine> {
         let mut arguments = vec![];
         while !self.match_token(vec![RightParen]) {
             if arguments.len() >= 25 {
                 return Err(self.raise(TooManyParameters));
             }
-            let arg = self.expression()?;
+            let arg = self.expression(symbol_table)?;
             arguments.push(arg);
             if self.peek().token_type == TokenType::Comma {
                 self.advance();
@@ -826,11 +945,11 @@ pub enum Expression {
         value: Box<Expression>,
     },
     MapGet {
-        key: String,
+        key: Box<Expression>,
     },
     ListGet {
         list: Box<Expression>,
-        index: usize,
+        index: Box<Expression>,
     },
     FieldGet {
         field: String,
@@ -857,20 +976,86 @@ impl Expression {
         }
     }
 
-    // pub fn get_type(&self) -> &str {
-    //     match self {
-    //         Expression::Binary { .. } => "binary",
-    //         Expression::Unary { .. } => TokenType::Unknown,
-    //         Expression::Grouping { .. } => TokenType::Unknown,
-    //         Expression::Literal { literaltype, .. } => literaltype.clone(),
-    //         Expression::List { literaltype, .. } => literaltype.clone(),
-    //         Expression::Map { literaltype, .. } => literaltype.clone(),
-    //         Expression::Variable { var_type, .. } => var_type.clone(),
-    //         Expression::FunctionCall { .. } => TokenType::Unknown,
-    //         Expression::Stop { .. } => TokenType::Unknown,
-    //         Expression::NamedParameter { .. } => TokenType::Unknown,
-    //         Expression::MapGet { .. } => TokenType::Unknown,
-    //         Expression::ListGet { .. } => TokenType::Unknown,
-    //     }
-    // }
+    pub fn infer_type(&self) -> TokenType {
+        match self {
+            Expression::Binary {
+                left,
+                operator,
+                right,
+                ..
+            } => {
+                let left_type = left.infer_type();
+                let right_type = right.infer_type();
+                if vec![Greater, Less, GreaterEqual, LessEqual].contains(&operator.token_type) {
+                    Bool
+                } else if left_type == right_type {
+                    // map to determined numeric type if yet undetermined (32 or 64 bits)
+                    match left_type {
+                        FloatingPoint => F64,
+                        Integer => I64,
+                        _ => left_type,
+                    }
+                } else {
+                    if let Plus = operator.token_type {
+                        // includes string concatenation with numbers
+                        // followed by type coercion to 64 bits for numeric types
+                        debug!("coerce {} : {}", left_type, right_type);
+                        match (left_type, right_type) {
+                            (_, StringType) => StringType,
+                            (StringType, _) => StringType,
+                            (FloatingPoint, _) => F64,
+                            (Integer, FloatingPoint) => F64,
+                            (Integer, _) => I64,
+                            (I64, Integer) => I64,
+                            (F64, _) => F64,
+                            (U64, U32) => U64,
+                            (I64, I32) => I64,
+                            // could add a date and a duration. future work
+                            // could add a List and a value. also future work
+                            // could add a Map and a tuple. Will I add tuple types? Future work!
+                            _ => panic!("Unexpected coercion"),
+                        }
+                        // could have done some fall through here, but this will fail less gracefully,
+                        // so if my thinking is wrong or incomplete it will panic
+                    } else {
+                        // type coercion to 64 bits for numeric types
+                        debug!("coerce {} : {}", left_type, right_type);
+                        match (left_type, right_type) {
+                            (FloatingPoint, _) => F64,
+                            (Integer, FloatingPoint) => F64,
+                            (Integer, I64) => I64,
+                            (I64, FloatingPoint) => F64,
+                            (F64, _) => F64,
+                            (U64, U32) => U64,
+                            (I64, I32) => I64,
+                            (I64, Integer) => I64,
+                            _ => panic!("Unexpected coercion"),
+                        }
+                    }
+                }
+            }
+            Expression::Grouping { expression, .. } => expression.infer_type(),
+            Expression::Literal { literaltype, .. } => literaltype.clone(),
+            Expression::List { literaltype, .. } => literaltype.clone(),
+            Expression::Map { literaltype, .. } => literaltype.clone(),
+            Expression::Unary {
+                right, operator, ..
+            } => {
+                let literal_type = right.infer_type();
+                if literal_type == Integer && operator.token_type == Minus {
+                    SignedInteger
+                } else {
+                    UnsignedInteger
+                }
+            }
+            Expression::Variable { var_type, .. } => var_type.clone(),
+            Expression::Stop { .. } => TokenType::Unknown,
+            // Expression::PathMatch { .. } => TokenType::Unknown,
+            Expression::NamedParameter { .. } => TokenType::Unknown,
+            Expression::ListGet { .. } => TokenType::Unknown,
+            Expression::MapGet { .. } => TokenType::Unknown,
+            Expression::FieldGet { .. } => TokenType::Unknown,
+            FunctionCall { .. } => TokenType::Unknown,
+        }
+    }
 }

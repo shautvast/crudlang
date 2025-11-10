@@ -1,8 +1,12 @@
 use crate::ast_compiler::{Expression, Parameter, Statement};
 use crate::errors::CompilerError;
 use crate::errors::CompilerError::{IncompatibleTypes, TypeError};
+use crate::tokens::TokenType::{
+    Bool, DateTime, F32, F64, FloatingPoint, Greater, GreaterEqual, I32, I64, Integer, Less,
+    LessEqual, ListType, MapType, Minus, Object, Plus, SignedInteger, StringType, U32, U64,
+    Unknown, UnsignedInteger,
+};
 use crate::tokens::{Token, TokenType};
-use crate::tokens::TokenType::{Bool, F32, F64, FloatingPoint, Greater, GreaterEqual, I32, I64, Integer, Less, LessEqual, ListType, MapType, Minus, Object, Plus, SignedInteger, StringType, U32, U64, Unknown, UnsignedInteger, DateTime};
 use log::debug;
 use std::collections::HashMap;
 
@@ -16,7 +20,6 @@ pub enum Symbol {
     Variable {
         name: String,
         var_type: TokenType,
-        initializer: Expression,
     },
     Object {
         name: String,
@@ -40,15 +43,17 @@ pub fn build(path: &str, ast: &[Statement], symbols: &mut HashMap<String, Symbol
                 var_type,
                 initializer,
             } => {
-
-                symbols.insert(
-                    make_qname(path, name),
-                    Symbol::Variable {
-                        name: name.lexeme.to_string(),
-                        var_type: var_type.clone(),
-                        initializer: initializer.clone(),
-                    },
-                );
+                let key = make_qname(path, name);
+                if !symbols.contains_key(&key) {
+                    // surely there's a better way to do this?
+                    symbols.insert(
+                        key,
+                        Symbol::Variable {
+                            name: name.lexeme.to_string(),
+                            var_type: var_type.clone(),
+                        },
+                    );
+                }
             }
             Statement::FunctionStmt { function } => {
                 symbols.insert(
@@ -88,7 +93,7 @@ pub fn _add_types(
                 initializer,
             } => {
                 let inferred_type = infer_type(initializer, symbols);
-                let calculated_type = calculate_type(var_type, &inferred_type, symbols)?;
+                let calculated_type = calculate_type(var_type, &inferred_type)?;
                 let entry = symbols.get_mut(&format!("{}.{}", path, name.lexeme));
                 if let Some(Symbol::Variable { var_type, .. }) = entry {
                     *var_type = calculated_type;
@@ -103,7 +108,6 @@ pub fn _add_types(
 pub fn calculate_type(
     declared_type: &TokenType,
     inferred_type: &TokenType,
-    _symbols: &HashMap<String, Symbol>,
 ) -> Result<TokenType, CompilerError> {
     Ok(if declared_type != &Unknown {
         if declared_type != inferred_type {
@@ -118,6 +122,7 @@ pub fn calculate_type(
                 (F64, FloatingPoint) => F64,
                 (U64, I64) => U64,
                 (U64, I32) => U64,
+                (I64, Integer) => I64,
                 (StringType, _) => StringType, // meh, this all needs rigorous testing. Update: this is in progress
                 _ => {
                     return Err(IncompatibleTypes(

@@ -174,13 +174,14 @@ more date functions will have to follow.
 **lists**
 ```
 let list = ["foo", "bar", 1, 1.0]
-print(list[1])
+list[1]
 => "bar"
 ```
 No generic types (yet). A list can hold any type.
 * lists support appending with + 
 ```
-let list 2 = list + "baz"
+let list2 = list + "baz"
+=>["foo", "bar", 1, 1.0, "baz"]
 ```
 _note to self: implement adding 2 lists_
 
