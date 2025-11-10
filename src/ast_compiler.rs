@@ -305,7 +305,7 @@ impl AstCompiler {
         if self.match_token(vec![Equal]) {
             let initializer = self.expression(symbol_table)?;
             let declared_type = declared_type.unwrap_or(Unknown);
-            let inferred_type = initializer.infer_type();
+            let inferred_type = infer_type(&initializer, symbol_table);
             let var_type =
                 calculate_type(&declared_type, &inferred_type).map_err(|e| self.raise(e))?;
             symbol_table.insert(
@@ -978,89 +978,6 @@ impl Expression {
             MapGet { .. } => 0,
             ListGet { .. } => 0,
             FieldGet { .. } => 0,
-        }
-    }
-
-    pub fn infer_type(&self) -> TokenType {
-        match self {
-            Expression::Binary {
-                left,
-                operator,
-                right,
-                ..
-            } => {
-                let left_type = left.infer_type();
-                let right_type = right.infer_type();
-                if vec![Greater, Less, GreaterEqual, LessEqual].contains(&operator.token_type) {
-                    Bool
-                } else if left_type == right_type {
-                    // map to determined numeric type if yet undetermined (32 or 64 bits)
-                    match left_type {
-                        FloatingPoint => F64,
-                        Integer => I64,
-                        _ => left_type,
-                    }
-                } else {
-                    if let Plus = operator.token_type {
-                        // includes string concatenation with numbers
-                        // followed by type coercion to 64 bits for numeric types
-                        debug!("coerce {} : {}", left_type, right_type);
-                        match (left_type, right_type) {
-                            (_, StringType) => StringType,
-                            (StringType, _) => StringType,
-                            (FloatingPoint, _) => F64,
-                            (Integer, FloatingPoint) => F64,
-                            (Integer, _) => I64,
-                            (I64, Integer) => I64,
-                            (F64, _) => F64,
-                            (U64, U32) => U64,
-                            (I64, I32) => I64,
-                            // could add a date and a duration. future work
-                            // could add a List and a value. also future work
-                            // could add a Map and a tuple. Will I add tuple types? Future work!
-                            _ => panic!("Unexpected coercion"),
-                        }
-                        // could have done some fall through here, but this will fail less gracefully,
-                        // so if my thinking is wrong or incomplete it will panic
-                    } else {
-                        // type coercion to 64 bits for numeric types
-                        debug!("coerce {} : {}", left_type, right_type);
-                        match (left_type, right_type) {
-                            (FloatingPoint, _) => F64,
-                            (Integer, FloatingPoint) => F64,
-                            (Integer, I64) => I64,
-                            (I64, FloatingPoint) => F64,
-                            (F64, _) => F64,
-                            (U64, U32) => U64,
-                            (I64, I32) => I64,
-                            (I64, Integer) => I64,
-                            _ => panic!("Unexpected coercion"),
-                        }
-                    }
-                }
-            }
-            Expression::Grouping { expression, .. } => expression.infer_type(),
-            Expression::Literal { literaltype, .. } => literaltype.clone(),
-            Expression::List { literaltype, .. } => literaltype.clone(),
-            Expression::Map { literaltype, .. } => literaltype.clone(),
-            Expression::Unary {
-                right, operator, ..
-            } => {
-                let literal_type = right.infer_type();
-                if literal_type == Integer && operator.token_type == Minus {
-                    SignedInteger
-                } else {
-                    UnsignedInteger
-                }
-            }
-            Expression::Variable { var_type, .. } => var_type.clone(),
-            Expression::Stop { .. } => TokenType::Unknown,
-            // Expression::PathMatch { .. } => TokenType::Unknown,
-            Expression::NamedParameter { .. } => TokenType::Unknown,
-            Expression::ListGet { .. } => TokenType::Unknown,
-            Expression::MapGet { .. } => TokenType::Unknown,
-            Expression::FieldGet { .. } => TokenType::Unknown,
-            FunctionCall { .. } => TokenType::Unknown,
         }
     }
 }
