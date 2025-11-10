@@ -6,12 +6,7 @@ use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType;
 use crate::tokens::TokenType::Unknown;
 use crate::value::Value;
-use crate::vm::{
-    OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_LIST,
-    OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL,
-    OP_LIST_GET, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR,
-    OP_SUBTRACT,
-};
+use crate::vm::{OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CALL_BUILTIN, OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT};
 use std::collections::HashMap;
 
 pub fn compile(
@@ -193,6 +188,31 @@ impl Compiler {
                     }
                 }
             }
+            Expression::MethodCall {
+                receiver,
+                method_name,
+                arguments,
+                ..
+            } => {
+                self.compile_expression(namespace, receiver, symbols, registry)?;
+                let receiver_type = infer_type(receiver,symbols).to_string();
+
+                let type_index = self
+                    .chunk
+                    .find_constant(&receiver_type)
+                    .unwrap_or_else(|| self.chunk.add_constant(Value::String(receiver_type)));
+
+                let name_index = self
+                    .chunk
+                    .find_constant(&method_name)
+                    .unwrap_or_else(|| self.chunk.add_constant(Value::String(method_name.to_string())));
+                //TODO lookup parameters for builtin
+                self.get_arguments_in_order( namespace, symbols, registry, arguments, &vec![])?;
+                self.emit_byte(OP_CALL_BUILTIN);
+                self.emit_byte(name_index as u16);
+                self.emit_byte(type_index as u16);
+                self.emit_byte(arguments.len() as u16);
+            }
             Expression::Variable { name, line, .. } => {
                 let name_index = self.vars.get(name);
                 if let Some(name_index) = name_index {
@@ -296,7 +316,13 @@ impl Compiler {
                     if name.lexeme == parameter.name.lexeme {
                         let value_type = infer_type(value, symbols);
                         if parameter.var_type != value_type {
-                            return Err(CompilerErrorAtLine::raise(CompilerError::IncompatibleTypes(parameter.var_type.clone(), value_type), argument.line()));
+                            return Err(CompilerErrorAtLine::raise(
+                                CompilerError::IncompatibleTypes(
+                                    parameter.var_type.clone(),
+                                    value_type,
+                                ),
+                                argument.line(),
+                            ));
                         } else {
                             self.compile_expression(namespace, argument, symbols, registry)?;
                             break;

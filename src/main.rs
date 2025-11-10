@@ -34,10 +34,10 @@ async fn main() -> Result<(), CrudLangError> {
     let args = Args::parse();
     let source = args.source.unwrap_or("./source".to_string());
     let registry = compile_sourcedir(&source)?;
+    let empty = registry.is_empty();
 
-
-    if !registry.is_empty() {
-        let swap = Arc::new(ArcSwap::from(Arc::new(registry)));
+    let swap = Arc::new(ArcSwap::from(Arc::new(registry)));
+    if !empty {
         if args.watch {
             crudlang::file_watch::start_watch_daemon(&source, swap.clone());
         }
@@ -63,12 +63,13 @@ async fn main() -> Result<(), CrudLangError> {
         }
 
         axum::serve(listener, app).await.map_err(map_underlying())?;
-        Ok(())
     } else {
-        Err(Platform(
-            "No source files found or compilation error".to_string(),
-        ))
+        println!("No source files found or compilation error");
+        if args.repl {
+            crudlang::repl::start(swap.clone())?;
+        }
     }
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -111,7 +112,7 @@ async fn handle_any(
     .await
     {
         Ok(value) => Ok(Json(value.to_string())),
-        Err(e) => {
+        Err(_) => {
             // url checks out but function for method not found
             if state.registry.load().get(&format!("{}.main", component)).is_some() {
                 Err(StatusCode::METHOD_NOT_ALLOWED)

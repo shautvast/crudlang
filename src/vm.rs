@@ -7,6 +7,7 @@ use arc_swap::Guard;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
+use crate::builtin_functions::call_builtin;
 
 pub struct Vm {
     ip: usize,
@@ -198,6 +199,26 @@ impl Vm {
                         self.push(list.get(index.cast_usize()?).cloned().unwrap())
                     }
                 }
+                OP_CALL_BUILTIN => {
+                    let function_name_index = self.read(chunk);
+                    let function_name = chunk.constants[function_name_index].to_string();
+                    let function_type_index = self.read(chunk);
+                    let receiver_type_name = chunk.constants[function_type_index].to_string();
+
+                    let receiver = self.pop();
+
+                    let num_args = self.read(chunk);
+
+                    let mut args = vec![];
+                    for _ in 0..num_args {
+                        let arg = self.pop();
+                        args.push(arg);
+                    }
+                    args.reverse();
+
+                    let return_value = call_builtin(&receiver_type_name, &function_name, receiver, args)?;
+                    self.push(return_value);
+                }
                 OP_CALL => {
                     let function_name_index = self.read(chunk);
                     let num_args = self.read(chunk);
@@ -346,3 +367,4 @@ pub const OP_DEF_F32: u16 = 39;
 pub const OP_DEF_F64: u16 = 40;
 pub const OP_ASSIGN: u16 = 41;
 pub const OP_LIST_GET: u16 = 42;
+pub const OP_CALL_BUILTIN: u16 = 43;

@@ -258,10 +258,20 @@ date"#),
         );
     }
 
-    // #[test]
-    // fn string_reverse(){
-    //     assert_eq!(run(r#""abc".reverse()"#), Ok(Value::String("cba".into())));
-    // }
+    #[test]
+    fn string_reverse(){
+        assert_eq!(run(r#""abc".reverse()"#), Ok(Value::String("cba".into())));
+    }
+
+    #[test]
+    fn string_to_upper(){
+        assert_eq!(run(r#""abc".to_uppercase()"#), Ok(Value::String("ABC".into())));
+    }
+
+    #[test]
+    fn string_len(){
+        assert_eq!(run(r#""abc".len()"#), Ok(Value::I64(3)));
+    }
 
     // #[test]
     // fn package() {

@@ -1,5 +1,5 @@
 use crate::ast_compiler::Expression::{
-    FieldGet, FunctionCall, ListGet, MapGet, NamedParameter, Stop, Variable,
+    FieldGet, FunctionCall, ListGet, MapGet, MethodCall, NamedParameter, Stop, Variable,
 };
 use crate::errors::CompilerError::{
     self, Expected, ParseError, TooManyParameters, UnexpectedIndent, UninitializedVariable,
@@ -517,7 +517,7 @@ impl AstCompiler {
         } else if self.match_token(vec![Dot]) {
             let name = self.peek().clone();
             self.advance();
-            self.field(expr, name)
+            self.field_or_method(expr, name, symbol_table)
         } else {
             Ok(expr)
         }
@@ -557,21 +557,33 @@ impl AstCompiler {
     }
 
     // work in progress
-    fn field(
+    fn field_or_method(
         &mut self,
-        _operand: Expression,
-        index: Token,
+        receiver: Expression,
+        op: Token,
+        symbol_table: &mut HashMap<String, Symbol>,
     ) -> Result<Expression, CompilerErrorAtLine> {
-        Ok(FieldGet {
-            field: index.lexeme.clone(),
-        })
+        if self.match_token(vec![LeftParen]) {
+            let arguments = self.arguments(symbol_table)?;
+            Ok(MethodCall {
+                receiver: Box::new(receiver.clone()),
+                method_name: op.lexeme,
+                arguments,
+                line: op.line,
+            })
+        } else {
+            // no test yet
+            Ok(FieldGet {
+                receiver: Box::new(receiver.clone()),
+                field: op.lexeme.clone(),
+             })
+        }
     }
 
     fn primary(
         &mut self,
         symbol_table: &mut HashMap<String, Symbol>,
     ) -> Result<Expression, CompilerErrorAtLine> {
-        debug!("primary {:?}", self.peek());
         Ok(if self.match_token(vec![LeftBracket]) {
             self.list(symbol_table)?
         } else if self.match_token(vec![LeftBrace]) {
@@ -755,6 +767,18 @@ impl AstCompiler {
         name: Token,
         symbol_table: &mut HashMap<String, Symbol>,
     ) -> Result<Expression, CompilerErrorAtLine> {
+        let arguments = self.arguments(symbol_table)?;
+        Ok(FunctionCall {
+            line: self.peek().line,
+            name: name.lexeme.to_string(),
+            arguments,
+        })
+    }
+
+    fn arguments(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Vec<Expression>, CompilerErrorAtLine> {
         let mut arguments = vec![];
         while !self.match_token(vec![RightParen]) {
             if arguments.len() >= 25 {
@@ -769,11 +793,7 @@ impl AstCompiler {
                 break;
             }
         }
-        Ok(FunctionCall {
-            line: self.peek().line,
-            name: name.lexeme.to_string(),
-            arguments,
-        })
+        Ok(arguments)
     }
 
     fn consume(
@@ -919,6 +939,12 @@ pub enum Expression {
         name: String,
         arguments: Vec<Expression>,
     },
+    MethodCall {
+        line: usize,
+        receiver: Box<Expression>,
+        method_name: String,
+        arguments: Vec<Expression>,
+    },
     Stop {
         line: usize,
     },
@@ -936,6 +962,7 @@ pub enum Expression {
         index: Box<Expression>,
     },
     FieldGet {
+        receiver: Box<Expression>,
         field: String,
     },
 }
@@ -951,6 +978,7 @@ impl Expression {
             Self::Map { line, .. } => *line,
             Variable { line, .. } => *line,
             FunctionCall { line, .. } => *line,
+            MethodCall {line,..} => *line,
             Stop { line } => *line,
             NamedParameter { line, .. } => *line,
             MapGet { .. } => 0,

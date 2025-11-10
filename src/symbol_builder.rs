@@ -3,8 +3,8 @@ use crate::errors::CompilerError;
 use crate::errors::CompilerError::IncompatibleTypes;
 use crate::tokens::TokenType::{
     Bool, DateTime, F32, F64, FloatingPoint, Greater, GreaterEqual, I32, I64, Integer, Less,
-    LessEqual, ListType, MapType, Minus, ObjectType, Plus, SignedInteger, StringType, U32,
-    U64, Unknown, UnsignedInteger,
+    LessEqual, ListType, MapType, Minus, ObjectType, Plus, SignedInteger, StringType, U32, U64,
+    Unknown, UnsignedInteger,
 };
 use crate::tokens::{Token, TokenType};
 use log::debug;
@@ -225,6 +225,10 @@ pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> Token
                 _ => Unknown,
             }
         }
+        Expression::MethodCall {
+            receiver,
+            ..
+        } => infer_type(receiver, symbols),
         Expression::Stop { .. } => TokenType::Unknown,
         // Expression::PathMatch { .. } => TokenType::Unknown,
         Expression::NamedParameter { .. } => TokenType::Unknown,
