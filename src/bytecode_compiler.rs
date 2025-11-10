@@ -6,22 +6,28 @@ use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType;
 use crate::tokens::TokenType::Unknown;
 use crate::value::Value;
-use crate::vm::{OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CALL_BUILTIN, OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT};
+use crate::vm::{
+    OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CALL_BUILTIN,
+    OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER,
+    OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR,
+    OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+};
+use crate::{Registry, SymbolTable};
 use std::collections::HashMap;
 
 pub fn compile(
     qualified_name: Option<&str>,
     ast: &Vec<Statement>,
-    symbols: &HashMap<String, Symbol>,
-    registry: &mut HashMap<String, Chunk>,
+    symbols: &SymbolTable,
+    registry: &mut Registry,
 ) -> Result<(), CompilerErrorAtLine> {
     compile_in_namespace(ast, qualified_name, symbols, registry)
 }
 
 pub(crate) fn compile_function(
     function: &Function,
-    symbols: &HashMap<String, Symbol>,
-    registry: &mut HashMap<String, Chunk>,
+    symbols: &SymbolTable,
+    registry: &mut Registry,
     namespace: &str,
 ) -> Result<Chunk, CompilerErrorAtLine> {
     let fn_name = &function.name.lexeme;
@@ -40,8 +46,8 @@ pub(crate) fn compile_function(
 pub(crate) fn compile_in_namespace(
     ast: &Vec<Statement>,
     namespace: Option<&str>,
-    symbols: &HashMap<String, Symbol>,
-    registry: &mut HashMap<String, Chunk>,
+    symbols: &SymbolTable,
+    registry: &mut Registry,
 ) -> Result<(), CompilerErrorAtLine> {
     let name = namespace.unwrap_or("main");
     let compiler = Compiler::new(name);
@@ -75,8 +81,8 @@ impl Compiler {
     fn compile(
         mut self,
         ast: &Vec<Statement>,
-        symbols: &HashMap<String, Symbol>,
-        registry: &mut HashMap<String, Chunk>,
+        symbols: &SymbolTable,
+        registry: &mut Registry,
         namespace: &str,
     ) -> Result<Chunk, CompilerErrorAtLine> {
         for statement in ast {
@@ -87,11 +93,15 @@ impl Compiler {
         Ok(self.chunk)
     }
 
+    fn raise(&self, error: CompilerError) -> CompilerErrorAtLine {
+        CompilerErrorAtLine::raise(error, self.current_line)
+    }
+
     fn compile_statement(
         &mut self,
         statement: &Statement,
-        symbols: &HashMap<String, Symbol>,
-        registry: &mut HashMap<String, Chunk>,
+        symbols: &SymbolTable,
+        registry: &mut Registry,
         namespace: &str,
     ) -> Result<(), CompilerErrorAtLine> {
         self.current_line = statement.line();
@@ -103,23 +113,20 @@ impl Compiler {
                 let var = symbols.get(name);
                 if let Some(Symbol::Variable { var_type, .. }) = var {
                     let inferred_type = infer_type(initializer, symbols);
-                    let calculated_type = calculate_type(var_type, &inferred_type)
-                        .map_err(|e| CompilerErrorAtLine::raise(e, statement.line()))?;
+                    let calculated_type =
+                        calculate_type(var_type, &inferred_type).map_err(|e| self.raise(e))?;
                     if var_type != &Unknown && var_type != &calculated_type {
-                        return Err(CompilerErrorAtLine::raise(
-                            CompilerError::IncompatibleTypes(var_type.clone(), calculated_type),
-                            statement.line(),
-                        ));
+                        return Err(self.raise(CompilerError::IncompatibleTypes(
+                            var_type.clone(),
+                            calculated_type,
+                        )));
                     }
                     let name_index = self.chunk.add_var(var_type, name);
                     self.vars.insert(name.to_string(), name_index);
                     self.compile_expression(namespace, initializer, symbols, registry)?;
                     self.emit_bytes(OP_ASSIGN, name_index as u16);
                 } else {
-                    return Err(CompilerErrorAtLine::raise(
-                        CompilerError::UndeclaredVariable(name.to_string()),
-                        statement.line(),
-                    ));
+                    return Err(self.raise(CompilerError::UndeclaredVariable(name.to_string())));
                 }
             }
             Statement::PrintStmt { value } => {
@@ -151,8 +158,8 @@ impl Compiler {
         &mut self,
         namespace: &str,
         expression: &Expression,
-        symbols: &HashMap<String, Symbol>,
-        registry: &mut HashMap<String, Chunk>,
+        symbols: &SymbolTable,
+        registry: &mut Registry,
     ) -> Result<(), CompilerErrorAtLine> {
         match expression {
             Expression::FunctionCall {
@@ -181,10 +188,7 @@ impl Compiler {
                         self.emit_byte(arguments.len() as u16);
                     }
                     _ => {
-                        return Err(CompilerErrorAtLine::raise(
-                            CompilerError::FunctionNotFound(name.to_string()),
-                            0,
-                        ));
+                        return Err(self.raise(CompilerError::FunctionNotFound(name.to_string())));
                     }
                 }
             }
@@ -195,19 +199,19 @@ impl Compiler {
                 ..
             } => {
                 self.compile_expression(namespace, receiver, symbols, registry)?;
-                let receiver_type = infer_type(receiver,symbols).to_string();
+                let receiver_type = infer_type(receiver, symbols).to_string();
 
                 let type_index = self
                     .chunk
                     .find_constant(&receiver_type)
                     .unwrap_or_else(|| self.chunk.add_constant(Value::String(receiver_type)));
 
-                let name_index = self
-                    .chunk
-                    .find_constant(&method_name)
-                    .unwrap_or_else(|| self.chunk.add_constant(Value::String(method_name.to_string())));
+                let name_index = self.chunk.find_constant(&method_name).unwrap_or_else(|| {
+                    self.chunk
+                        .add_constant(Value::String(method_name.to_string()))
+                });
                 //TODO lookup parameters for builtin
-                self.get_arguments_in_order( namespace, symbols, registry, arguments, &vec![])?;
+                self.get_arguments_in_order(namespace, symbols, registry, arguments, &vec![])?;
                 self.emit_byte(OP_CALL_BUILTIN);
                 self.emit_byte(name_index as u16);
                 self.emit_byte(type_index as u16);
@@ -218,10 +222,7 @@ impl Compiler {
                 if let Some(name_index) = name_index {
                     self.emit_bytes(OP_GET, *name_index as u16);
                 } else {
-                    return Err(CompilerErrorAtLine::raise(
-                        CompilerError::UndeclaredVariable(name.to_string()),
-                        *line,
-                    ));
+                    return Err(self.raise(CompilerError::UndeclaredVariable(name.to_string())));
                 }
             }
             Expression::Literal { value, .. } => {
@@ -305,8 +306,8 @@ impl Compiler {
     fn get_arguments_in_order(
         &mut self,
         namespace: &str,
-        symbols: &HashMap<String, Symbol>,
-        registry: &mut HashMap<String, Chunk>,
+        symbols: &SymbolTable,
+        registry: &mut Registry,
         arguments: &Vec<Expression>,
         parameters: &Vec<Parameter>,
     ) -> Result<(), CompilerErrorAtLine> {
@@ -316,13 +317,10 @@ impl Compiler {
                     if name.lexeme == parameter.name.lexeme {
                         let value_type = infer_type(value, symbols);
                         if parameter.var_type != value_type {
-                            return Err(CompilerErrorAtLine::raise(
-                                CompilerError::IncompatibleTypes(
-                                    parameter.var_type.clone(),
-                                    value_type,
-                                ),
-                                argument.line(),
-                            ));
+                            return Err(self.raise(CompilerError::IncompatibleTypes(
+                                parameter.var_type.clone(),
+                                value_type,
+                            )));
                         } else {
                             self.compile_expression(namespace, argument, symbols, registry)?;
                             break;

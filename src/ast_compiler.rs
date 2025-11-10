@@ -16,10 +16,7 @@ use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use log::debug;
 use std::collections::HashMap;
-
-type SymbolTable = HashMap<String, Symbol>;
-type Expr = Result<Expression, CompilerErrorAtLine>;
-type Stmt = Result<Statement, CompilerErrorAtLine>;
+use crate::{Expr, Stmt, SymbolTable};
 
 pub fn compile(
     path: Option<&str>,

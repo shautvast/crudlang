@@ -1,7 +1,9 @@
+use crate::ast_compiler::{Expression, Statement};
 use crate::chunk::Chunk;
-use crate::errors::CrudLangError;
 use crate::errors::CrudLangError::Platform;
+use crate::errors::{CompilerErrorAtLine, CrudLangError};
 use crate::scanner::scan;
+use crate::symbol_builder::Symbol;
 use crate::value::Value;
 use crate::vm::interpret;
 use arc_swap::ArcSwap;
@@ -11,6 +13,7 @@ use std::sync::Arc;
 use walkdir::WalkDir;
 
 pub mod ast_compiler;
+mod builtins;
 pub mod bytecode_compiler;
 pub mod chunk;
 mod compiler_tests;
@@ -23,7 +26,11 @@ mod symbol_builder;
 mod tokens;
 mod value;
 pub mod vm;
-mod builtins;
+
+pub(crate) type SymbolTable = HashMap<String, Symbol>;
+pub(crate) type Expr = Result<Expression, CompilerErrorAtLine>;
+pub(crate) type Stmt = Result<Statement, CompilerErrorAtLine>;
+pub(crate) type Registry = HashMap<String, Chunk>;
 
 pub fn compile_sourcedir(source_dir: &str) -> Result<HashMap<String, Chunk>, CrudLangError> {
     let mut registry = HashMap::new();
