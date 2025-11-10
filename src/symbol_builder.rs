@@ -1,10 +1,10 @@
 use crate::ast_compiler::{Expression, Parameter, Statement};
 use crate::errors::CompilerError;
-use crate::errors::CompilerError::{IncompatibleTypes, TypeError};
+use crate::errors::CompilerError::IncompatibleTypes;
 use crate::tokens::TokenType::{
     Bool, DateTime, F32, F64, FloatingPoint, Greater, GreaterEqual, I32, I64, Integer, Less,
-    LessEqual, ListType, MapType, Minus, Object, Plus, SignedInteger, StringType, U32, U64,
-    Unknown, UnsignedInteger,
+    LessEqual, ListType, MapType, Minus, ObjectType, Plus, SignedInteger, StringType, U32,
+    U64, Unknown, UnsignedInteger,
 };
 use crate::tokens::{Token, TokenType};
 use log::debug;
@@ -138,7 +138,7 @@ pub fn calculate_type(
             DateTime => DateTime,
             ListType => ListType,
             MapType => MapType,
-            Object => Object,
+            ObjectType(p) => ObjectType(p.clone()),
             _ => return Err(CompilerError::UnexpectedType(inferred_type.clone())),
         }
     })
@@ -219,10 +219,10 @@ pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> Token
         Expression::Variable { var_type, .. } => var_type.clone(),
         Expression::FunctionCall { name, .. } => {
             let symbol = symbols.get(name);
-            if let Some(Symbol::Function { return_type, .. }) = symbol {
-                return_type.clone()
-            } else {
-                Unknown
+            match symbol {
+                Some(Symbol::Function { return_type, .. }) => return_type.clone(),
+                Some(Symbol::Object { name, .. }) => ObjectType(name.clone()),
+                _ => Unknown,
             }
         }
         Expression::Stop { .. } => TokenType::Unknown,

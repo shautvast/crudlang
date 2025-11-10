@@ -81,6 +81,8 @@ pub enum RuntimeError {
     Expected(&'static str, &'static str),
     #[error("Function {0} not found")]
     FunctionNotFound(String),
+    #[error("The number of of arguments for {0} is not correct. Should be {1}, got {2}")]
+    IllegalArgumentsException(String,usize,usize),
 }
 
 #[derive(Error, Debug, PartialEq)]

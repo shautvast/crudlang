@@ -2,10 +2,8 @@ use crate::chunk::Chunk;
 use crate::errors::RuntimeError::Something;
 use crate::errors::{RuntimeError, ValueError};
 use crate::tokens::TokenType;
-use crate::value::Value;
+use crate::value::{Object, Value};
 use arc_swap::Guard;
-use axum::http::Uri;
-use reqwest::get;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
@@ -216,8 +214,25 @@ impl Vm {
                         .registry
                         .get(&function_name)
                         .or_else(|| self.registry.get(&format!("{}/{}", context, function_name)));
+
                     if function_chunk.is_none() {
-                        return Err(RuntimeError::FunctionNotFound(function_name));
+                        let constructor = chunk.object_defs.get(&function_name);
+
+                        if let Some(params) = constructor {
+                            if params.len() != args.len() {
+                                return Err(RuntimeError::IllegalArgumentsException(function_name, params.len(), args.len()));
+                            }
+
+                            let mut fields = vec![];
+                            params.iter().zip(args.into_iter()).for_each(|(param, arg)| {fields.push((param.name.lexeme.clone(), arg))});
+                            let new_instance = Value::ObjectType(Box::new(Object {
+                                definition: function_name,
+                                fields,
+                            }));
+                            self.push(new_instance);
+                        } else {
+                            return Err(RuntimeError::FunctionNotFound(function_name));
+                        }
                     } else {
                         let result = interpret_function(function_chunk.unwrap(), args)?;
                         self.push(result);

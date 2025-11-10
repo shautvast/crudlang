@@ -15,7 +15,7 @@ pub struct Chunk {
     pub code: Vec<u16>,
     pub constants: Vec<Value>,
     lines: Vec<usize>,
-    object_defs: HashMap<String, Vec<Parameter>>,
+    pub(crate) object_defs: HashMap<String, Vec<Parameter>>,
     pub(crate) function_parameters: Vec<Parameter>,
     pub vars: Vec<(TokenType, String)>
 }

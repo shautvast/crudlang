@@ -2,17 +2,15 @@ use crate::ast_compiler::Expression::{
     FieldGet, FunctionCall, ListGet, MapGet, NamedParameter, Stop, Variable,
 };
 use crate::errors::CompilerError::{
-    self, Expected, ParseError, TooManyParameters, UndeclaredVariable, UnexpectedIndent,
-    UninitializedVariable,
+    self, Expected, ParseError, TooManyParameters, UnexpectedIndent, UninitializedVariable,
 };
 use crate::errors::CompilerErrorAtLine;
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, DateTime, Dot, Eof, Eol, Equal, F32, F64, False, FloatingPoint, Fn,
-    Greater, GreaterEqual, GreaterGreater, I32, I64, Identifier, Indent, Integer, LeftBrace,
-    LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus,
-    Print, RightBrace, RightBracket, RightParen, SignedInteger, SingleRightArrow, Slash, Star,
-    StringType, True, U32, U64, Unknown, UnsignedInteger,
+    Bang, Bool, Char, Colon, DateTime, Dot, Eof, Eol, Equal, False, FloatingPoint, Fn, Greater,
+    GreaterEqual, GreaterGreater, Identifier, Indent, Integer, LeftBrace, LeftBracket, LeftParen,
+    Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightBrace,
+    RightBracket, RightParen, SingleRightArrow, Slash, Star, StringType, True, U32, U64, Unknown,
 };
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
@@ -125,7 +123,7 @@ impl AstCompiler {
         } else if self.match_token(vec![Let]) {
             self.let_declaration(symbol_table)
         } else if self.match_token(vec![Object]) {
-            self.object_declaration()
+            self.object_declaration(symbol_table)
         } else if self.match_token(vec![TokenType::Pipe]) {
             self.guard_declaration(symbol_table)
         } else {
@@ -194,7 +192,10 @@ impl AstCompiler {
         Err(self.raise(Expected("unimplemented")))
     }
 
-    fn object_declaration(&mut self) -> Result<Statement, CompilerErrorAtLine> {
+    fn object_declaration(
+        &mut self,
+        symbol_table: &mut HashMap<String, Symbol>,
+    ) -> Result<Statement, CompilerErrorAtLine> {
         let type_name = self.consume(Identifier, Expected("object name."))?;
         self.consume(Colon, Expected("':' after object name."))?;
         self.consume(Eol, Expected("end of line."))?;
@@ -202,7 +203,6 @@ impl AstCompiler {
         let mut fields = vec![];
 
         let expected_indent = self.indent.last().unwrap() + 1;
-        // self.indent.push(expected_indent);
         let mut done = false;
         while !done && !self.match_token(vec![Eof]) {
             for _ in 0..expected_indent {
@@ -228,6 +228,16 @@ impl AstCompiler {
             }
         }
         self.consume(Eol, Expected("end of line."))?;
+
+        let type_name_as_str = type_name.lexeme.clone();
+        symbol_table.insert(
+            type_name_as_str.clone(),
+            Symbol::Object {
+                name: type_name_as_str.clone(),
+                fields: fields.clone(),
+            },
+        ); // name name name
+
         Ok(Statement::ObjectStmt {
             name: type_name,
             fields,
@@ -518,7 +528,7 @@ impl AstCompiler {
         operand: Expression,
         index: Expression,
     ) -> Result<Expression, CompilerErrorAtLine> {
-        let get = (match &operand {
+        let get = match &operand {
             Expression::Map { .. } => MapGet {
                 map: Box::new(operand),
                 key: Box::new(index),
@@ -541,7 +551,7 @@ impl AstCompiler {
                 }
             },
             _ => return Err(self.raise(CompilerError::IllegalTypeToIndex("Unknown".to_string()))),
-        });
+        };
         self.consume(RightBracket, Expected("']' after index."))?;
         Ok(get)
     }
@@ -634,14 +644,14 @@ impl AstCompiler {
             Expression::Literal {
                 line: self.peek().line,
                 literaltype: DateTime,
-                value: Value::DateTime(
+                value: Value::DateTime(Box::new(
                     chrono::DateTime::parse_from_str(
                         &self.previous().lexeme,
                         "%Y-%m-%d %H:%M:%S%.3f %z",
                     )
                     .map_err(|_| self.raise(ParseError(self.previous().lexeme.clone())))?
                     .into(),
-                ),
+                )),
             }
         } else if self.match_token(vec![LeftParen]) {
             let expr = self.expression(symbol_table)?;
@@ -653,38 +663,11 @@ impl AstCompiler {
         } else {
             let token = self.advance().clone();
             debug!("{:?}", token);
-            // function call?
             if self.match_token(vec![LeftParen]) {
                 self.function_call(token.clone(), symbol_table)?
             } else if self.match_token(vec![Colon]) {
                 self.named_parameter(&token, symbol_table)?
             } else {
-                // } else if self.check(Dot) {
-                // chain of variable or function lookups?
-                // let mut name = "/".to_string();
-                // name.push_str(&self.previous().lexeme);
-                // while self.match_token(vec![Dot]) {
-                //     name.push_str("/");
-                //     name.push_str(&self.peek().lexeme);
-                //     self.advance();
-                // }
-                // chained function call?
-                // if self.match_token(vec![LeftParen]) {
-                //     self.function_call(name())?
-                // } else {
-                // empty line
-                // return if self.match_token(vec![Eol, Eof]) {
-                //     Ok(Expression::Literal {
-                //         value: Value::Void,
-                //         literaltype: Object,
-                //         line: token.line,
-                //     })
-                // } else {
-                //     Err(self.raise(UndeclaredVariable(token.lexeme.clone())))
-                // };
-                // }
-                // } else {
-                // none of the above, must be a variable lookup
                 self.variable_lookup(&token, symbol_table)?
             }
         })
@@ -939,10 +922,6 @@ pub enum Expression {
     Stop {
         line: usize,
     },
-    // PathMatch {
-    //     line: usize,
-    //     condition: Box<Expression>,
-    // },
     NamedParameter {
         line: usize,
         name: Token,
@@ -973,7 +952,6 @@ impl Expression {
             Variable { line, .. } => *line,
             FunctionCall { line, .. } => *line,
             Stop { line } => *line,
-            // Expression::PathMatch { line, .. } => *line,
             NamedParameter { line, .. } => *line,
             MapGet { .. } => 0,
             ListGet { .. } => 0,

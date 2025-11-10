@@ -8,8 +8,8 @@ use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
 
 #[derive(Debug, Clone)]
 pub struct Object {
-    definition: String,
-    fields: Vec<Value>,
+    pub(crate) definition: String,
+    pub(crate) fields: Vec<(String,Value)>,
 }
 
 #[derive(Debug, Clone)]
@@ -23,7 +23,7 @@ pub enum Value {
     String(String),
     Char(char),
     Bool(bool),
-    DateTime(DateTime<Utc>),
+    DateTime(Box<DateTime<Utc>>),
     Enum,
     List(Vec<Value>),
     Map(HashMap<Value, Value>),
@@ -156,7 +156,7 @@ impl Into<Value> for bool {
 
 impl Into<Value> for DateTime<Utc> {
     fn into(self) -> Value {
-        Value::DateTime(self)
+        Value::DateTime(Box::new(self))
     }
 }
 

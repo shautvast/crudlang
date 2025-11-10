@@ -1,5 +1,5 @@
 use crate::ast_compiler::Expression::NamedParameter;
-use crate::ast_compiler::{Expression, Function, Statement};
+use crate::ast_compiler::{Expression, Function, Parameter, Statement};
 use crate::chunk::Chunk;
 use crate::errors::{CompilerError, CompilerErrorAtLine};
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
@@ -183,29 +183,29 @@ impl Compiler {
                     .find_constant(&name)
                     .unwrap_or_else(|| self.chunk.add_constant(Value::String(name.to_string())));
                 let function = symbols.get(name);
-                if let Some(Symbol::Function { parameters, .. }) = function {
-                    for parameter in parameters {
-                        for argument in arguments {
-                            if let NamedParameter { name, .. } = argument {
-                                if name.lexeme == parameter.name.lexeme {
-                                    self.compile_expression(
-                                        namespace, argument, symbols, registry,
-                                    )?;
-                                    break;
-                                }
-                            } else {
-                                self.compile_expression(namespace, argument, symbols, registry)?;
-                                break;
-                            }
-                        }
+                match function {
+                    Some(Symbol::Function { parameters, .. }) => {
+                        self.get_arguments_in_order(
+                            namespace, symbols, registry, arguments, parameters,
+                        )?;
+
+                        self.emit_bytes(OP_CALL, name_index as u16);
+                        self.emit_byte(arguments.len() as u16);
                     }
-                    self.emit_bytes(OP_CALL, name_index as u16);
-                    self.emit_byte(arguments.len() as u16);
-                } else {
-                    return Err(CompilerErrorAtLine::raise(
-                        CompilerError::FunctionNotFound(name.to_string()),
-                        0,
-                    ));
+                    // constructor function
+                    Some(Symbol::Object { fields, .. }) => {
+                        self.get_arguments_in_order(
+                            namespace, symbols, registry, arguments, fields,
+                        )?;
+                        self.emit_bytes(OP_CALL, name_index as u16);
+                        self.emit_byte(arguments.len() as u16);
+                    }
+                    _ => {
+                        return Err(CompilerErrorAtLine::raise(
+                            CompilerError::FunctionNotFound(name.to_string()),
+                            0,
+                        ));
+                    }
                 }
             }
             Expression::Variable { name, line, .. } => {
@@ -281,8 +281,7 @@ impl Compiler {
                 }
             }
             Expression::Stop { .. } => {}
-            // Expression::PathMatch { line, .. } => {}
-            NamedParameter { .. } => {}
+            NamedParameter { value,.. } => {self.compile_expression(namespace, value, symbols, registry)?}
             Expression::ListGet { index, list } => {
                 self.compile_expression(namespace, list, symbols, registry)?;
                 self.compile_expression(namespace, index, symbols, registry)?;
@@ -290,6 +289,32 @@ impl Compiler {
             }
             Expression::MapGet { .. } => {}
             Expression::FieldGet { .. } => {}
+        }
+        Ok(())
+    }
+
+    // any unnamed parameters must be passed in order
+    // named parameters do not have to be passed in order, but they do need to be evaluated in the order of the called function/constructor
+    fn get_arguments_in_order(
+        &mut self,
+        namespace: &str,
+        symbols: &HashMap<String, Symbol>,
+        registry: &mut HashMap<String, Chunk>,
+        arguments: &Vec<Expression>,
+        parameters: &Vec<Parameter>,
+    ) -> Result<(), CompilerErrorAtLine> {
+        for parameter in parameters {
+            for argument in arguments {
+                if let NamedParameter { name, .. } = argument {
+                    if name.lexeme == parameter.name.lexeme {
+                        self.compile_expression(namespace, argument, symbols, registry)?;
+                        break;
+                    }
+                } else {
+                    self.compile_expression(namespace, argument, symbols, registry)?;
+                    break;
+                }
+            }
         }
         Ok(())
     }

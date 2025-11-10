@@ -115,10 +115,9 @@ a"#),
     #[test]
     fn call_fn_with_args_returns_value() {
         assert_eq!(
-            run(r#"
-fn add_hello(name: string) -> string:
+            run(r#"fn add_hello(name: string) -> string:
     "Hello " + name
-add_hello("world")"#,),
+add_hello("world")"#),
             Ok(Value::String("Hello world".to_string()))
         );
     }
@@ -133,20 +132,20 @@ object Person:
         assert!(r.is_ok()); // does nothing runtime
     }
 
-    //     #[test]
-    //     fn object_() {
-    //         let r = run(
-    //             r#"
-    // object Person:
-    //    name: string
-    //
-    // let p = Person(name: "Sander")
-    // print p
-    // "#,
-    //         );
-    //         println!("{:?}", r);
-    //         assert!(r.is_ok());
-    //     }
+    #[test]
+    fn declare_and_instantiate_object() {
+        let r = run(r#"
+object Person:
+   name: string
+
+let p = Person(name: "Sander")
+p"#);
+        assert!(r.is_ok());
+        assert_eq!(
+            r#"Person: [("name", String("Sander"))]"#,
+            format!("{}", r.unwrap().to_string())
+        );
+    }
 
     #[test]
     fn literal_map() {
@@ -233,14 +232,14 @@ m["name"]"#);
         assert_eq!(
             run(r#"let date:datetime = d"2025-11-09 16:44:28.000 +0100"
 date"#),
-            Ok(Value::DateTime(
+            Ok(Value::DateTime(Box::new(
                 DateTime::parse_from_str(
                     "2025-11-09 16:44:28.000 +0100",
                     "%Y-%m-%d %H:%M:%S%.3f %z"
                 )
                 .unwrap()
                 .into()
-            ))
+            )))
         );
     }
 

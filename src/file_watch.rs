@@ -1,9 +1,7 @@
 use crate::chunk::Chunk;
 use crate::compile_sourcedir;
-use log4rs::append::Append;
 use notify::{RecursiveMode, Watcher};
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::channel;

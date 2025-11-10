@@ -80,6 +80,7 @@ pub fn compile(src: &str) -> Result<HashMap<String, Chunk>, CrudLangError> {
     Ok(registry)
 }
 
+#[cfg(test)]
 pub(crate) fn run(src: &str) -> Result<Value, CrudLangError> {
     let tokens = scan(src)?;
     let mut symbol_table = HashMap::new();
