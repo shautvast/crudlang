@@ -102,17 +102,11 @@ impl Compiler {
         self.current_line = statement.line();
         match statement {
             Statement::VarStmt {
-                name,
-                var_type,
-                initializer,
+                name, initializer, ..
             } => {
                 let name = name.lexeme.as_str();
                 let var = symbols.get(name);
-                if let Some(Symbol::Variable {
-                    var_type,
-                    ..
-                }) = var
-                {
+                if let Some(Symbol::Variable { var_type, .. }) = var {
                     let inferred_type = infer_type(initializer, symbols);
                     let calculated_type = calculate_type(var_type, &inferred_type)
                         .map_err(|e| CompilerErrorAtLine::raise(e, statement.line()))?;
@@ -189,13 +183,7 @@ impl Compiler {
                     .find_constant(&name)
                     .unwrap_or_else(|| self.chunk.add_constant(Value::String(name.to_string())));
                 let function = symbols.get(name);
-                if let Some(Symbol::Function {
-                    name,
-                    parameters,
-                    return_type,
-                    body,
-                }) = function
-                {
+                if let Some(Symbol::Function { parameters, .. }) = function {
                     for parameter in parameters {
                         for argument in arguments {
                             if let NamedParameter { name, .. } = argument {
@@ -295,7 +283,7 @@ impl Compiler {
             Expression::Stop { .. } => {}
             // Expression::PathMatch { line, .. } => {}
             NamedParameter { .. } => {}
-            Expression::ListGet { index, list} => {
+            Expression::ListGet { index, list } => {
                 self.compile_expression(namespace, list, symbols, registry)?;
                 self.compile_expression(namespace, index, symbols, registry)?;
                 self.emit_byte(OP_LIST_GET);

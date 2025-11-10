@@ -38,11 +38,7 @@ fn make_qname(path: &str, name: &Token) -> String {
 pub fn build(path: &str, ast: &[Statement], symbols: &mut HashMap<String, Symbol>) {
     for statement in ast {
         match statement {
-            Statement::VarStmt {
-                name,
-                var_type,
-                initializer,
-            } => {
+            Statement::VarStmt { name, var_type, .. } => {
                 let key = make_qname(path, name);
                 if !symbols.contains_key(&key) {
                     // surely there's a better way to do this?

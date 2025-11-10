@@ -2,7 +2,7 @@
 mod tests {
     use crate::value::Value;
     use crate::{compile, run};
-    use chrono::{DateTime};
+    use chrono::DateTime;
 
     #[test]
     fn literal_int() {
@@ -42,8 +42,11 @@ mod tests {
 
     #[test]
     fn index_in_list_as_var() {
-        assert_eq!(run(r#"let a:list = ["abc","def"]
-a[1]"#), Ok(Value::String("def".into())))
+        assert_eq!(
+            run(r#"let a:list = ["abc","def"]
+a[1]"#),
+            Ok(Value::String("def".into()))
+        )
     }
 
     #[test]
@@ -163,7 +166,7 @@ object Person:
     }
 
     #[test]
-    fn define_map() {
+    fn assign_map() {
         let result = run(r#"let m = {"name": "Dent"}
 m"#);
 
@@ -173,6 +176,17 @@ m"#);
                 map.get(&Value::String("name".to_string())).unwrap(),
                 &Value::String("Dent".to_string())
             );
+        }
+    }
+
+    #[test]
+    fn access_map() {
+        let result = run(r#"let m = {"name": "Dent"}
+m["name"]"#);
+
+        let result = result.unwrap();
+        if let Value::String(v) = result {
+            assert_eq!(v.as_str(), "Dent");
         }
     }
 

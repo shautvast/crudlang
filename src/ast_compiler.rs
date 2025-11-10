@@ -520,35 +520,39 @@ impl AstCompiler {
     ) -> Result<Expression, CompilerErrorAtLine> {
         let get = (match &operand {
             Expression::Map { .. } => MapGet {
+                map: Box::new(operand),
                 key: Box::new(index),
             },
             Expression::List { .. } => ListGet {
                 list: Box::new(operand),
                 index: Box::new(index),
             },
-            Variable { var_type, .. } => {
-                if var_type == &ListType {
-                    ListGet {
-                        list: Box::new(operand),
-                        index: Box::new(index),
-                    }
-                } else {
+            Variable { var_type, .. } => match var_type {
+                ListType => ListGet {
+                    list: Box::new(operand),
+                    index: Box::new(index),
+                },
+                MapType => MapGet {
+                    map: Box::new(operand),
+                    key: Box::new(index),
+                },
+                _ => {
                     return Err(self.raise(CompilerError::IllegalTypeToIndex(var_type.to_string())));
                 }
-            }
+            },
             _ => return Err(self.raise(CompilerError::IllegalTypeToIndex("Unknown".to_string()))),
         });
         self.consume(RightBracket, Expected("']' after index."))?;
         Ok(get)
     }
 
+    // work in progress
     fn field(
         &mut self,
-        operand: Expression,
+        _operand: Expression,
         index: Token,
     ) -> Result<Expression, CompilerErrorAtLine> {
-        //TODO?
-        Ok(Expression::FieldGet {
+        Ok(FieldGet {
             field: index.lexeme.clone(),
         })
     }
@@ -635,7 +639,7 @@ impl AstCompiler {
                         &self.previous().lexeme,
                         "%Y-%m-%d %H:%M:%S%.3f %z",
                     )
-                    .map_err(|e| self.raise(ParseError(self.previous().lexeme.clone())))?
+                    .map_err(|_| self.raise(ParseError(self.previous().lexeme.clone())))?
                     .into(),
                 ),
             }
@@ -945,6 +949,7 @@ pub enum Expression {
         value: Box<Expression>,
     },
     MapGet {
+        map: Box<Expression>,
         key: Box<Expression>,
     },
     ListGet {

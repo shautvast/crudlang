@@ -49,8 +49,6 @@ pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudL
         //     break;
         // }
     }
-    // println!("-- Crudlang -- REPL exited");
-    Ok(())
 }
 
 fn list_endpoints(registry: Arc<HashMap<String, Chunk>>) {
