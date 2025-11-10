@@ -87,7 +87,7 @@ pub enum TokenType {
     Unknown,
     Void,
     While,
-    ObjectType(String)
+    ObjectType(String),
 }
 
 impl fmt::Display for TokenType {
@@ -162,7 +162,6 @@ impl fmt::Display for TokenType {
             TokenType::While => write!(f, "while"),
             TokenType::SignedInteger => write!(f, "i32/64"),
             TokenType::UnsignedInteger => write!(f, "u32/64"),
-
         }
     }
 }
@@ -171,20 +170,20 @@ impl Eq for TokenType {}
 
 impl TokenType {
     pub(crate) fn is_type(&self) -> bool {
-        match self {
+        matches!(
+            self,
             TokenType::I32
-            | TokenType::I64
-            | TokenType::U32
-            | TokenType::U64
-            | TokenType::F32
-            | TokenType::F64
-            | TokenType::StringType
-            | TokenType::DateTime
-            | TokenType::Object
-            | TokenType::ListType
-            | TokenType::MapType
-            | TokenType::Char => true,
-            _ => false,
-        }
+                | TokenType::I64
+                | TokenType::U32
+                | TokenType::U64
+                | TokenType::F32
+                | TokenType::F64
+                | TokenType::StringType
+                | TokenType::DateTime
+                | TokenType::Object
+                | TokenType::ListType
+                | TokenType::MapType
+                | TokenType::Char
+        )
     }
 }

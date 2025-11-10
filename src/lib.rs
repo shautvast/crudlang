@@ -42,7 +42,7 @@ pub fn compile_sourcedir(source_dir: &str) -> Result<HashMap<String, Chunk>, Cru
             let source = fs::read_to_string(path).map_err(map_underlying())?;
             let tokens = scan(&source)?;
             let mut symbol_table = HashMap::new();
-            match ast_compiler::compile(Some(&path), tokens, &mut symbol_table) {
+            match ast_compiler::compile(Some(path), tokens, &mut symbol_table) {
                 Ok(statements) => {
                     let path = path.strip_prefix(source_dir).unwrap().replace(".crud", "");
 

@@ -28,7 +28,7 @@ pub enum Symbol {
 }
 
 fn make_qname(path: &str, name: &Token) -> String {
-    if path == "" {
+    if path.is_empty() {
         name.lexeme.to_string()
     } else {
         format!("{}.{}", path, name.lexeme)
@@ -40,16 +40,10 @@ pub fn build(path: &str, ast: &[Statement], symbols: &mut HashMap<String, Symbol
         match statement {
             Statement::VarStmt { name, var_type, .. } => {
                 let key = make_qname(path, name);
-                if !symbols.contains_key(&key) {
-                    // surely there's a better way to do this?
-                    symbols.insert(
-                        key,
-                        Symbol::Variable {
-                            name: name.lexeme.to_string(),
-                            var_type: var_type.clone(),
-                        },
-                    );
-                }
+                symbols.entry(key).or_insert_with(|| Symbol::Variable {
+                    name: name.lexeme.to_string(),
+                    var_type: var_type.clone(),
+                });
             }
             Statement::FunctionStmt { function } => {
                 symbols.insert(
@@ -154,7 +148,7 @@ pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> Token
         } => {
             let left_type = infer_type(left, symbols);
             let right_type = infer_type(right, symbols);
-            if vec![Greater, Less, GreaterEqual, LessEqual].contains(&operator.token_type) {
+            if [Greater, Less, GreaterEqual, LessEqual].contains(&operator.token_type) {
                 Bool
             } else if left_type == right_type {
                 // map to determined numeric type if yet undetermined (32 or 64 bits)
@@ -225,10 +219,7 @@ pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> Token
                 _ => Unknown,
             }
         }
-        Expression::MethodCall {
-            receiver,
-            ..
-        } => infer_type(receiver, symbols),
+        Expression::MethodCall { receiver, .. } => infer_type(receiver, symbols),
         Expression::Stop { .. } => TokenType::Unknown,
         // Expression::PathMatch { .. } => TokenType::Unknown,
         Expression::NamedParameter { .. } => TokenType::Unknown,

@@ -163,22 +163,22 @@ impl Into<Value> for DateTime<Utc> {
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
-            &Value::U32(v) => write!(f, "{}", v),
-            &Value::U64(v) => write!(f, "{}", v),
-            &Value::String(v) => write!(f, "{}", v),
-            &Value::Bool(v) => write!(f, "{}", v),
-            &Value::I32(v) => write!(f, "{}", v),
-            &Value::I64(v) => write!(f, "{}", v),
-            &Value::F32(v) => write!(f, "{}", v),
-            &Value::F64(v) => write!(f, "{}", v),
-            &Value::Char(v) => write!(f, "{}", v),
-            &Value::DateTime(v) => write!(f, "{}", v),
-            &Value::Enum => write!(f, "enum"),
-            &Value::ObjectType(o) => write!(f, "{}: {:?}", o.definition, o.fields),
-            &Value::List(v) => write!(f, "{:?}", v),
-            &Value::Map(map) => to_string(f, map),
-            &Value::Error(v) => write!(f, "{}", v),
-            &Value::Void => write!(f, "()"),
+            Value::U32(v) => write!(f, "{}", v),
+            Value::U64(v) => write!(f, "{}", v),
+            Value::String(v) => write!(f, "{}", v),
+            Value::Bool(v) => write!(f, "{}", v),
+            Value::I32(v) => write!(f, "{}", v),
+            Value::I64(v) => write!(f, "{}", v),
+            Value::F32(v) => write!(f, "{}", v),
+            Value::F64(v) => write!(f, "{}", v),
+            Value::Char(v) => write!(f, "{}", v),
+            Value::DateTime(v) => write!(f, "{}", v),
+            Value::Enum => write!(f, "enum"),
+            Value::ObjectType(o) => write!(f, "{}: {:?}", o.definition, o.fields),
+            Value::List(v) => write!(f, "{:?}", v),
+            Value::Map(map) => to_string(f, map),
+            Value::Error(v) => write!(f, "{}", v),
+            Value::Void => write!(f, "()"),
         }
     }
 }

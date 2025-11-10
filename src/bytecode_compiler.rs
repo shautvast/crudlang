@@ -1,6 +1,7 @@
 use crate::ast_compiler::Expression::NamedParameter;
 use crate::ast_compiler::{Expression, Function, Parameter, Statement};
 use crate::chunk::Chunk;
+use crate::errors::CompilerError::{IncompatibleTypes, UndeclaredVariable};
 use crate::errors::{CompilerError, CompilerErrorAtLine};
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType;
@@ -116,19 +117,19 @@ impl Compiler {
                     let calculated_type =
                         calculate_type(var_type, &inferred_type).map_err(|e| self.raise(e))?;
                     if var_type != &Unknown && var_type != &calculated_type {
-                        return Err(self.raise(CompilerError::IncompatibleTypes(
-                            var_type.clone(),
-                            calculated_type,
-                        )));
+                        return Err(
+                            self.raise(IncompatibleTypes(var_type.clone(), calculated_type))
+                        );
                     }
                     let name_index = self.chunk.add_var(var_type, name);
                     self.vars.insert(name.to_string(), name_index);
                     self.compile_expression(namespace, initializer, symbols, registry)?;
                     self.emit_bytes(OP_ASSIGN, name_index as u16);
                 } else {
-                    return Err(self.raise(CompilerError::UndeclaredVariable(name.to_string())));
+                    return Err(self.raise(UndeclaredVariable(name.to_string())));
                 }
             }
+            // replace with function
             Statement::PrintStmt { value } => {
                 self.compile_expression(namespace, value, symbols, registry)?;
                 self.emit_byte(OP_PRINT);
@@ -217,7 +218,7 @@ impl Compiler {
                 self.emit_byte(type_index as u16);
                 self.emit_byte(arguments.len() as u16);
             }
-            Expression::Variable { name, line, .. } => {
+            Expression::Variable { name, .. } => {
                 let name_index = self.vars.get(name);
                 if let Some(name_index) = name_index {
                     self.emit_bytes(OP_GET, *name_index as u16);

@@ -58,7 +58,7 @@ pub async fn interpret_async(
             .insert("query".to_string(), Value::Map(value_map(query_params)));
         vm.local_vars
             .insert("headers".to_string(), Value::Map(value_map(headers)));
-        vm.run(&get_context(function), &chunk)
+        vm.run(&get_context(function), chunk)
     } else {
         Err(RuntimeError::FunctionNotFound(function.to_string()))
     }
@@ -89,7 +89,7 @@ impl Vm {
         for (_, name) in chunk.vars.iter() {
             self.local_vars.insert(name.clone(), args.remove(0));
         }
-        self.run("", &chunk)
+        self.run("", chunk)
     }
 
     fn run(&mut self, context: &str, chunk: &Chunk) -> Result<Value, RuntimeError> {
@@ -251,7 +251,7 @@ impl Vm {
                             let mut fields = vec![];
                             params
                                 .iter()
-                                .zip(args.into_iter())
+                                .zip(args)
                                 .for_each(|(param, arg)| {
                                     fields.push((param.name.lexeme.clone(), arg))
                                 });
@@ -303,7 +303,7 @@ fn binary_op(vm: &mut Vm, op: impl Fn(&Value, &Value) -> Result<Value, ValueErro
         Ok(result) => vm.push(result),
         Err(e) => {
             vm.error_occurred = true;
-            println!("Error: {} {:?} and {:?}", e.to_string(), a, b);
+            println!("Error: {} {:?} and {:?}", e, a, b);
         }
     }
 }
