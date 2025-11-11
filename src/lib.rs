@@ -4,12 +4,8 @@ use crate::errors::CrudLangError::Platform;
 use crate::errors::{CompilerErrorAtLine, CrudLangError};
 use crate::scanner::scan;
 use crate::symbol_builder::Symbol;
-use crate::value::Value;
-use crate::vm::interpret;
-use arc_swap::ArcSwap;
 use std::collections::HashMap;
 use std::fs;
-use std::sync::Arc;
 use walkdir::WalkDir;
 
 pub mod ast_compiler;
@@ -89,13 +85,13 @@ pub fn compile(src: &str) -> Result<HashMap<String, Chunk>, CrudLangError> {
 }
 
 #[cfg(test)]
-pub(crate) fn run(src: &str) -> Result<Value, CrudLangError> {
-    let tokens = scan(src)?;
-    let mut symbol_table = HashMap::new();
-    let ast = ast_compiler::compile(None, tokens, &mut symbol_table)?;
-    symbol_builder::build("", &ast, &mut symbol_table);
-    let mut registry = HashMap::new();
-    bytecode_compiler::compile(None, &ast, &symbol_table, &mut registry)?;
-    let registry = ArcSwap::from(Arc::new(registry));
-    interpret(registry.load(), "main").map_err(CrudLangError::from)
+pub(crate) fn run(src: &str) -> Result<value::Value, CrudLangError> {
+        let tokens = scan(src)?;
+        let mut symbol_table = HashMap::new();
+        let ast = ast_compiler::compile(None, tokens, &mut symbol_table)?;
+        symbol_builder::build("", &ast, &mut symbol_table);
+        let mut registry = HashMap::new();
+        bytecode_compiler::compile(None, &ast, &symbol_table, &mut registry)?;
+        let registry = arc_swap::ArcSwap::from(std::sync::Arc::new(registry));
+        vm::interpret(registry.load(), "main").map_err(CrudLangError::from)
 }

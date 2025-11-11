@@ -36,7 +36,7 @@ pub fn start_watch_daemon(source: &str, registry: Arc<ArcSwap<HashMap<String, Ch
             let start = SystemTime::now();
             loop {
                 thread::sleep(Duration::from_millis(50));
-                if let Ok(_) = rx.recv() {
+                if rx.recv().is_ok() {
                     file_changed = true;
                 }
                 if file_changed && SystemTime::now().duration_since(start).unwrap() > ONE_SEC {

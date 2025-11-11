@@ -27,7 +27,7 @@ pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudL
             _ => {
                 let registry_copy = registry.load().clone();
                 let mut registry_copy = registry_copy.deref().clone();
-                match recompile(&input, &mut registry_copy){
+                match recompile(input, &mut registry_copy){
                     Ok(_)=> {
                         registry.store(Arc::new(registry_copy));
 

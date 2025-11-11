@@ -70,31 +70,6 @@ pub fn build(path: &str, ast: &[Statement], symbols: &mut HashMap<String, Symbol
     }
 }
 
-pub fn _add_types(
-    path: &str,
-    ast: &[Statement],
-    symbols: &mut HashMap<String, Symbol>,
-) -> Result<(), CompilerError> {
-    for statement in ast {
-        match statement {
-            Statement::VarStmt {
-                name,
-                var_type,
-                initializer,
-            } => {
-                let inferred_type = infer_type(initializer, symbols);
-                let calculated_type = calculate_type(var_type, &inferred_type)?;
-                let entry = symbols.get_mut(&format!("{}.{}", path, name.lexeme));
-                if let Some(Symbol::Variable { var_type, .. }) = entry {
-                    *var_type = calculated_type;
-                }
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
-
 pub fn calculate_type(
     declared_type: &TokenType,
     inferred_type: &TokenType,
@@ -157,42 +132,40 @@ pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> Token
                     Integer => I64,
                     _ => left_type,
                 }
+            } else if let Plus = operator.token_type {
+                // includes string concatenation with numbers
+                // followed by type coercion to 64 bits for numeric types
+                debug!("coerce {} : {}", left_type, right_type);
+                match (left_type, right_type) {
+                    (_, StringType) => StringType,
+                    (StringType, _) => StringType,
+                    (FloatingPoint, _) => F64,
+                    (Integer, FloatingPoint) => F64,
+                    (Integer, _) => I64,
+                    (I64, Integer) => I64,
+                    (F64, _) => F64,
+                    (U64, U32) => U64,
+                    (I64, I32) => I64,
+                    // could add a date and a duration. future work
+                    // could add a List and a value. also future work
+                    // could add a Map and a tuple. Will I add tuple types? Future work!
+                    _ => panic!("Unexpected coercion"),
+                }
+                // could have done some fall through here, but this will fail less gracefully,
+                // so if my thinking is wrong or incomplete it will panic
             } else {
-                if let Plus = operator.token_type {
-                    // includes string concatenation with numbers
-                    // followed by type coercion to 64 bits for numeric types
-                    debug!("coerce {} : {}", left_type, right_type);
-                    match (left_type, right_type) {
-                        (_, StringType) => StringType,
-                        (StringType, _) => StringType,
-                        (FloatingPoint, _) => F64,
-                        (Integer, FloatingPoint) => F64,
-                        (Integer, _) => I64,
-                        (I64, Integer) => I64,
-                        (F64, _) => F64,
-                        (U64, U32) => U64,
-                        (I64, I32) => I64,
-                        // could add a date and a duration. future work
-                        // could add a List and a value. also future work
-                        // could add a Map and a tuple. Will I add tuple types? Future work!
-                        _ => panic!("Unexpected coercion"),
-                    }
-                    // could have done some fall through here, but this will fail less gracefully,
-                    // so if my thinking is wrong or incomplete it will panic
-                } else {
-                    // type coercion to 64 bits for numeric types
-                    debug!("coerce {} : {}", left_type, right_type);
-                    match (left_type, right_type) {
-                        (FloatingPoint, _) => F64,
-                        (Integer, FloatingPoint) => F64,
-                        (Integer, I64) => I64,
-                        (I64, FloatingPoint) => F64,
-                        (F64, _) => F64,
-                        (U64, U32) => U64,
-                        (I64, I32) => I64,
-                        (I64, Integer) => I64,
-                        _ => panic!("Unexpected coercion"),
-                    }
+                // type coercion to 64 bits for numeric types
+                debug!("coerce {} : {}", left_type, right_type);
+                match (left_type, right_type) {
+                    (FloatingPoint, _) => F64,
+                    (Integer, FloatingPoint) => F64,
+                    (Integer, I64) => I64,
+                    (I64, FloatingPoint) => F64,
+                    (F64, _) => F64,
+                    (U64, U32) => U64,
+                    (I64, I32) => I64,
+                    (I64, Integer) => I64,
+                    _ => panic!("Unexpected coercion"),
                 }
             }
         }

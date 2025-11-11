@@ -14,9 +14,9 @@ use crate::tokens::TokenType::{
 };
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
+use crate::{Expr, Stmt, SymbolTable};
 use log::debug;
 use std::collections::HashMap;
-use crate::{Expr, Stmt, SymbolTable};
 
 pub fn compile(
     path: Option<&str>,
@@ -109,7 +109,7 @@ impl AstCompiler {
             Err(self.raise(UnexpectedIndent(indent_on_line, expected_indent)))
         } else if indent_on_line < expected_indent {
             self.indent.pop();
-            return Ok(None);
+            Ok(None)
         } else {
             Ok(Some(self.declaration(symbol_table)?))
         }
@@ -139,13 +139,13 @@ impl AstCompiler {
     }
 
     fn guard_if_expr(&mut self, symbol_table: &mut SymbolTable) -> Expr {
-        while !self.check(&SingleRightArrow) {
-            if self.match_token(&[Slash]) {
-                return self.path_guard_expr();
+        if !self.check(&SingleRightArrow) {
+            return if self.match_token(&[Slash]) {
+                self.path_guard_expr()
             } else if self.match_token(&[TokenType::Question]) {
-                return self.query_guard_expr(symbol_table);
+                self.query_guard_expr(symbol_table)
             } else {
-                return Err(self.raise(Expected("-> or ?")));
+                Err(self.raise(Expected("-> or ?")))
             }
         }
         Ok(Stop {
@@ -408,7 +408,7 @@ impl AstCompiler {
         mut expr: Expression,
         symbol_table: &mut SymbolTable,
     ) -> Expr {
-        while self.match_token(&types) {
+        while self.match_token(types) {
             let operator = self.previous().clone();
             let right = self.comparison(symbol_table)?;
             expr = Expression::Binary {
@@ -431,8 +431,7 @@ impl AstCompiler {
                 right: Box::new(right),
             })
         } else {
-            let expr = self.get(symbol_table);
-            expr
+            self.get(symbol_table)
         }
     }
 
@@ -541,7 +540,7 @@ impl AstCompiler {
                 line: self.peek().line,
                 literaltype: Integer,
                 value: Value::U32(
-                    u32::from_str_radix(&self.previous().lexeme.trim_start_matches("0x"), 16)
+                    u32::from_str_radix(self.previous().lexeme.trim_start_matches("0x"), 16)
                         .map_err(|e| self.raise(ParseError(format!("{:?}", e))))?,
                 ),
             }
@@ -550,7 +549,7 @@ impl AstCompiler {
                 line: self.peek().line,
                 literaltype: Integer,
                 value: Value::U64(
-                    u64::from_str_radix(&self.previous().lexeme.trim_start_matches("0x"), 16)
+                    u64::from_str_radix(self.previous().lexeme.trim_start_matches("0x"), 16)
                         .map_err(|e| self.raise(ParseError(format!("{:?}", e))))?,
                 ),
             }
@@ -747,7 +746,7 @@ impl AstCompiler {
         if !self.is_at_end() {
             self.current += 1;
         }
-        &self.previous()
+        self.previous()
     }
 
     fn is_at_end(&self) -> bool {

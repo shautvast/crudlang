@@ -141,7 +141,7 @@ impl Scanner {
                 _ => {
                     if c == '0' && self.peek() == 'x' {
                         self.hex_number()?;
-                    } else if is_digit(c) {
+                    } else if c.is_ascii_digit() {
                         self.number();
                     } else if is_alpha(c) {
                         self.identifier();
@@ -167,7 +167,7 @@ impl Scanner {
     fn hex_number(&mut self) -> Result<(), CompilerErrorAtLine> {
         self.advance();
         self.advance();
-        while is_digit(self.peek()) || is_alpha(self.peek()) {
+        while self.peek().is_ascii_hexdigit() {
             self.advance();
         }
         let value: String = self.chars[self.start..self.current].iter().collect();
@@ -182,11 +182,11 @@ impl Scanner {
     }
 
     fn number(&mut self) {
-        while is_digit(self.peek()) {
+        while self.peek().is_ascii_digit() {
             self.advance();
         }
         let mut has_dot = false;
-        if self.peek() == '.' && is_digit(self.peek_next()) {
+        if self.peek() == '.' && self.peek_next().is_ascii_digit() {
             has_dot = true;
             self.advance();
         }
@@ -269,9 +269,7 @@ impl Scanner {
     }
 
     fn match_next(&mut self, expected: char) -> bool {
-        if self.is_at_end() {
-            false
-        } else if self.chars[self.current] != expected {
+        if self.is_at_end() || self.chars[self.current] != expected{
             false
         } else {
             self.current += 1;
@@ -306,20 +304,19 @@ struct Scanner {
     new_line: bool,
 }
 
-fn is_digit(c: char) -> bool {
-    c >= '0' && c <= '9'
-}
 
 fn is_digit_or_scientific(c: char) -> bool {
-    is_digit(c) || c == 'e' || c == 'E'
+    c.is_ascii_digit() || c == 'e' || c == 'E'
 }
 
 fn is_alphanumeric(c: char) -> bool {
-    is_alpha(c) || is_digit(c)
+    is_alpha(c) ||  c.is_ascii_digit()
 }
 
 fn is_alpha(c: char) -> bool {
-    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$'
+    // (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' || c == '$'
+    // ('a'..='z').contains(&c) || ('A'..='Z').contains(&c) || c == '_' || c == '$'
+    c.is_ascii_lowercase() || c.is_ascii_uppercase() || c == '_' || c == '$'
 }
 
 #[cfg(test)]

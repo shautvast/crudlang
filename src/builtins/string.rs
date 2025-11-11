@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::builtins::builtin_functions::{insert, MethodMap};
+use crate::builtins::{insert, MethodMap};
 use crate::errors::RuntimeError;
 use crate::value::Value;
 

@@ -1,13 +1,13 @@
-use std::collections::HashMap;
 use crate::ast_compiler::Parameter;
 use crate::tokens::TokenType;
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_F32,
-    OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_STRING, OP_DEFINE, OP_DIVIDE, OP_EQUAL,
-    OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY, OP_NEGATE, OP_NOT,
-    OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT, OP_DEF_MAP,
+    OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_MAP, OP_DEF_STRING, OP_DEFINE,
+    OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY,
+    OP_NEGATE, OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Chunk {
@@ -17,16 +17,16 @@ pub struct Chunk {
     lines: Vec<usize>,
     pub(crate) object_defs: HashMap<String, Vec<Parameter>>,
     pub(crate) function_parameters: Vec<Parameter>,
-    pub vars: Vec<(TokenType, String)>
+    pub vars: Vec<(TokenType, String)>,
 }
 
 impl Chunk {
     pub(crate) fn find_constant(&self, p0: &String) -> Option<usize> {
         for (i, constant) in self.constants.iter().enumerate() {
-            if let Value::String(s) = constant {
-                if s == p0 {
-                    return Some(i);
-                }
+            if let Value::String(s) = constant
+                && s == p0
+            {
+                return Some(i);
             }
         }
         None
@@ -42,7 +42,7 @@ impl Chunk {
             lines: vec![],
             object_defs: HashMap::new(),
             function_parameters: vec![],
-            vars: vec![]
+            vars: vec![],
         }
     }
 
@@ -61,7 +61,7 @@ impl Chunk {
         self.vars.len() - 1
     }
 
-    pub (crate) fn add_object_def(&mut self, name: &str, fields: &[Parameter]){
+    pub(crate) fn add_object_def(&mut self, name: &str, fields: &[Parameter]) {
         self.object_defs.insert(name.to_string(), fields.to_vec());
     }
 

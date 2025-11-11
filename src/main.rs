@@ -5,14 +5,12 @@ use axum::{Json, Router};
 use clap::Parser;
 use crudlang::chunk::Chunk;
 use crudlang::errors::CrudLangError;
-use crudlang::errors::CrudLangError::Platform;
 use crudlang::vm::interpret_async;
 use crudlang::{compile_sourcedir, map_underlying};
-use notify::Watcher;
 use std::collections::HashMap;
 use std::sync::Arc;
 use arc_swap::ArcSwap;
-use log::{debug, info};
+use log::info;
 
 /// A simple CLI tool to greet users
 #[derive(Parser, Debug)]

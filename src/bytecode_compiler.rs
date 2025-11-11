@@ -168,7 +168,7 @@ impl Compiler {
             } => {
                 let name_index = self
                     .chunk
-                    .find_constant(&name)
+                    .find_constant(name)
                     .unwrap_or_else(|| self.chunk.add_constant(Value::String(name.to_string())));
                 let function = symbols.get(name);
                 match function {
@@ -207,7 +207,7 @@ impl Compiler {
                     .find_constant(&receiver_type)
                     .unwrap_or_else(|| self.chunk.add_constant(Value::String(receiver_type)));
 
-                let name_index = self.chunk.find_constant(&method_name).unwrap_or_else(|| {
+                let name_index = self.chunk.find_constant(method_name).unwrap_or_else(|| {
                     self.chunk
                         .add_constant(Value::String(method_name.to_string()))
                 });
