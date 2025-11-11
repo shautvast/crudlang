@@ -94,69 +94,67 @@ impl Value {
     }
 }
 
-impl Into<Value> for i32 {
-    fn into(self) -> Value {
-        Value::I32(self)
+impl From<i32> for Value {
+    fn from(v: i32) -> Value {
+        Value::I32(v)
     }
 }
 
-impl Into<Value> for i64 {
-    fn into(self) -> Value {
-        Value::I64(self)
+impl From<i64> for Value {
+    fn from(v: i64) -> Value {
+        Value::I64(v)
     }
 }
 
-impl Into<Value> for u32 {
-    fn into(self) -> Value {
-        Value::U32(self)
+impl From<u32> for Value {
+    fn from(v: u32) -> Value {
+        Value::U32(v)
+    }
+}
+impl From<u64> for Value {
+    fn from(v: u64) -> Value {
+        Value::U64(v)
+    }
+}
+impl From<f32> for Value {
+    fn from(v: f32) -> Value {
+        Value::F32(v)
     }
 }
 
-impl Into<Value> for u64 {
-    fn into(self) -> Value {
-        Value::U64(self)
+impl From<f64> for Value {
+    fn from(v: f64) -> Value {
+        Value::F64(v)
     }
 }
 
-impl Into<Value> for f32 {
-    fn into(self) -> Value {
-        Value::F32(self)
+impl From<&str> for Value {
+    fn from(v: &str) -> Value {
+        Value::String(v.to_string())
     }
 }
 
-impl Into<Value> for f64 {
-    fn into(self) -> Value {
-        Value::F64(self)
+impl From<String> for Value {
+    fn from(v: String) -> Value {
+        Value::String(v)
     }
 }
 
-impl Into<Value> for &str {
-    fn into(self) -> Value {
-        Value::String(self.to_string())
+impl From<char> for Value {
+    fn from(v: char) -> Value {
+        Value::Char(v)
     }
 }
 
-impl Into<Value> for String {
-    fn into(self) -> Value {
-        Value::String(self)
+impl From<bool> for Value {
+    fn from(v: bool) -> Value {
+        Value::Bool(v)
     }
 }
 
-impl Into<Value> for char {
-    fn into(self) -> Value {
-        Value::Char(self)
-    }
-}
-
-impl Into<Value> for bool {
-    fn into(self) -> Value {
-        Value::Bool(self)
-    }
-}
-
-impl Into<Value> for DateTime<Utc> {
-    fn into(self) -> Value {
-        Value::DateTime(Box::new(self))
+impl From<DateTime<Utc>> for Value {
+    fn from(v: DateTime<Utc>) -> Value {
+        Value::DateTime(Box::new(v))
     }
 }
 
