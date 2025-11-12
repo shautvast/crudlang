@@ -3,10 +3,10 @@ use axum::http::StatusCode;
 use axum::routing::any;
 use axum::{Json, Router};
 use clap::Parser;
-use crudlang::chunk::Chunk;
-use crudlang::errors::CrudLangError;
-use crudlang::vm::interpret_async;
-use crudlang::{compile_sourcedir, map_underlying};
+use tipi_lang::chunk::Chunk;
+use tipi_lang::errors::CrudLangError;
+use tipi_lang::vm::interpret_async;
+use tipi_lang::{compile_sourcedir, map_underlying};
 use std::collections::HashMap;
 use std::sync::Arc;
 use arc_swap::ArcSwap;
@@ -37,7 +37,7 @@ async fn main() -> Result<(), CrudLangError> {
     let swap = Arc::new(ArcSwap::from(Arc::new(registry)));
     if !empty {
         if args.watch {
-            crudlang::file_watch::start_watch_daemon(&source, swap.clone());
+            tipi_lang::file_watch::start_watch_daemon(&source, swap.clone());
         }
         println!("-- Compilation successful --");
         let state =AppState {
@@ -57,14 +57,14 @@ async fn main() -> Result<(), CrudLangError> {
         );
 
         if args.repl {
-            std::thread::spawn(move || crudlang::repl::start(swap.clone()).unwrap());
+            std::thread::spawn(move || tipi_lang::repl::start(swap.clone()).unwrap());
         }
 
         axum::serve(listener, app).await.map_err(map_underlying())?;
     } else {
         println!("No source files found or compilation error");
         if args.repl {
-            crudlang::repl::start(swap.clone())?;
+            tipi_lang::repl::start(swap.clone())?;
         }
     }
     Ok(())

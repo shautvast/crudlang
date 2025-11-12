@@ -39,7 +39,7 @@ pub(crate) fn compile_function(
 
         compiler.vars.insert(name, var_index);
     }
-    let mut chunk = compiler.compile(&function.body, symbols, registry, namespace)?;
+    let mut chunk = compiler.compile(&function.body, symbols, registry, namespace)?.chunk;
     chunk.function_parameters = function.parameters.to_vec();
     Ok(chunk)
 }
@@ -52,7 +52,7 @@ pub(crate) fn compile_in_namespace(
 ) -> Result<(), CompilerErrorAtLine> {
     let name = namespace.unwrap_or("main");
     let compiler = Compiler::new(name);
-    let chunk = compiler.compile(ast, symbols, registry, name)?;
+    let chunk = compiler.compile(ast, symbols, registry, name)?.chunk;
     let qname = if let Some(namespace) = namespace {
         format!("{}/{}", namespace, "main")
     } else {
@@ -62,7 +62,7 @@ pub(crate) fn compile_in_namespace(
     Ok(())
 }
 
-struct Compiler {
+pub(crate) struct Compiler {
     chunk: Chunk,
     _had_error: bool,
     current_line: usize,
@@ -70,7 +70,7 @@ struct Compiler {
 }
 
 impl Compiler {
-    fn new(name: &str) -> Self {
+    pub(crate) fn new(name: &str) -> Self {
         Self {
             chunk: Chunk::new(name),
             _had_error: false,
@@ -79,19 +79,19 @@ impl Compiler {
         }
     }
 
-    fn compile(
+    pub(crate) fn compile(
         mut self,
         ast: &Vec<Statement>,
         symbols: &SymbolTable,
         registry: &mut Registry,
         namespace: &str,
-    ) -> Result<Chunk, CompilerErrorAtLine> {
+    ) -> Result<Self, CompilerErrorAtLine> {
         for statement in ast {
             self.compile_statement(statement, symbols, registry, namespace)?;
         }
 
         self.emit_byte(OP_RETURN);
-        Ok(self.chunk)
+        Ok(self)
     }
 
     fn raise(&self, error: CompilerError) -> CompilerErrorAtLine {
@@ -223,7 +223,7 @@ impl Compiler {
                 if let Some(name_index) = name_index {
                     self.emit_bytes(OP_GET, *name_index as u16);
                 } else {
-                    return Err(self.raise(CompilerError::UndeclaredVariable(name.to_string())));
+                    return Err(self.raise(UndeclaredVariable(name.to_string())));
                 }
             }
             Expression::Literal { value, .. } => {

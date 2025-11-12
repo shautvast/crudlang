@@ -294,32 +294,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crudlang"
-version = "0.1.0"
-dependencies = [
- "arc-swap",
- "axum",
- "chrono",
- "clap",
- "dotenv",
- "log",
- "log4rs",
- "notify",
- "reqwest",
- "serde",
- "thiserror",
- "tokio",
- "tokio-postgres",
- "tower",
- "tower-http",
- "tower-livereload",
- "tracing",
- "tracing-subscriber",
- "url",
- "walkdir",
-]
-
-[[package]]
 name = "crypto-common"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1851,6 +1825,32 @@ name = "tinyvec_macros"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+
+[[package]]
+name = "tipi-lang"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "axum",
+ "chrono",
+ "clap",
+ "dotenv",
+ "log",
+ "log4rs",
+ "notify",
+ "reqwest",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tokio-postgres",
+ "tower",
+ "tower-http",
+ "tower-livereload",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "walkdir",
+]
 
 [[package]]
 name = "tokio"

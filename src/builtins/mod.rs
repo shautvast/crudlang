@@ -33,3 +33,6 @@ pub fn call(
         (self_val, args)
 }
 
+pub(crate) fn expected(expected_type: &str) -> RuntimeError {
+    RuntimeError::ExpectedType(expected_type.to_string())
+}

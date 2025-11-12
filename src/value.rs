@@ -9,7 +9,7 @@ use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
 #[derive(Debug, Clone)]
 pub struct Object {
     pub(crate) definition: String,
-    pub(crate) fields: Vec<(String,Value)>,
+    pub(crate) fields: Vec<(String, Value)>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +30,18 @@ pub enum Value {
     ObjectType(Box<Object>),
     Error(String),
     Void,
+}
+
+pub(crate) fn string(v: impl Into<String>) -> Value {
+    Value::String(v.into())
+}
+
+pub(crate) fn i64(v: impl Into<i64>) -> Value {
+    Value::I64(v.into())
+}
+
+pub(crate) fn bool(v: impl Into<bool>) -> Value {
+    Value::Bool(v.into())
 }
 
 impl Value {

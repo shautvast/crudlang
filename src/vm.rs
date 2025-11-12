@@ -7,31 +7,23 @@ use arc_swap::Guard;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
+use crate::Registry;
 
 pub struct Vm {
     ip: usize,
     stack: Vec<Value>,
     local_vars: HashMap<String, Value>,
     error_occurred: bool,
-    registry: Arc<HashMap<String, Chunk>>,
+    pub(crate) registry: Arc<HashMap<String, Chunk>>,
 }
+
 
 pub fn interpret(
     registry: Guard<Arc<HashMap<String, Chunk>>>,
     function: &str,
 ) -> Result<Value, RuntimeError> {
     let chunk = registry.get(function).unwrap().clone();
-    // for (key,value) in registry.iter() {
-    //     println!("{}", key);
-    //     value.disassemble();
-    // }
-    let mut vm = Vm {
-        ip: 0,
-        stack: vec![],
-        local_vars: HashMap::new(),
-        error_occurred: false,
-        registry: registry.clone(),
-    };
+    let mut vm = Vm::new(&registry);
     vm.run(&get_context(function), &chunk)
 }
 
@@ -44,13 +36,7 @@ pub async fn interpret_async(
 ) -> Result<Value, RuntimeError> {
     let chunk = registry.get(function);
     if let Some(chunk) = chunk {
-        let mut vm = Vm {
-            ip: 0,
-            stack: vec![],
-            local_vars: HashMap::new(),
-            error_occurred: false,
-            registry: registry.clone(),
-        };
+        let mut vm = Vm::new(&registry);
         vm.local_vars
             .insert("path".to_string(), Value::String(uri.into()));
         vm.local_vars
@@ -71,18 +57,21 @@ fn value_map(strings: HashMap<String, String>) -> HashMap<Value, Value> {
 }
 
 pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
-    let mut vm = Vm {
-        ip: 0,
-        stack: vec![],
-        local_vars: HashMap::new(),
-        error_occurred: false,
-        registry: Arc::new(HashMap::new()),
-    };
-
+    let mut vm = Vm::new(& Arc::new(HashMap::new()));
     vm.run_function(chunk, args)
 }
 
 impl Vm {
+    pub(crate) fn new(registry: &Arc<Registry>) -> Self {
+        Self {
+            ip: 0,
+            stack: vec![],
+            local_vars: HashMap::new(),
+            error_occurred: false,
+            registry: registry.clone(),
+        }
+    }
+
     fn run_function(&mut self, chunk: &Chunk, mut args: Vec<Value>) -> Result<Value, RuntimeError> {
         // arguments -> locals
         for (_, name) in chunk.vars.iter() {
@@ -91,7 +80,7 @@ impl Vm {
         self.run("", chunk)
     }
 
-    fn run(&mut self, context: &str, chunk: &Chunk) -> Result<Value, RuntimeError> {
+    pub(crate) fn run(&mut self, context: &str, chunk: &Chunk) -> Result<Value, RuntimeError> {
         loop {
             if self.error_occurred {
                 return Err(Something);
@@ -313,7 +302,7 @@ fn unary_op(stack: &mut Vm, op: impl Fn(&Value) -> Result<Value, ValueError> + C
     }
 }
 
-fn get_context(path: &str) -> String {
+pub(crate) fn get_context(path: &str) -> String {
     let mut parts: Vec<&str> = path.split('/').collect();
     if parts.len() >= 2 {
         parts.truncate(parts.len() - 2);
