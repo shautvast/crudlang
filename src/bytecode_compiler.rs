@@ -15,6 +15,7 @@ use crate::vm::{
 };
 use crate::{Registry, SymbolTable};
 use std::collections::HashMap;
+use std::mem;
 
 pub fn compile(
     qualified_name: Option<&str>,
@@ -39,7 +40,7 @@ pub(crate) fn compile_function(
 
         compiler.vars.insert(name, var_index);
     }
-    let mut chunk = compiler.compile(&function.body, symbols, registry, namespace)?.chunk;
+    let mut chunk = compiler.compile(&function.body, symbols, registry, namespace)?;
     chunk.function_parameters = function.parameters.to_vec();
     Ok(chunk)
 }
@@ -51,8 +52,8 @@ pub(crate) fn compile_in_namespace(
     registry: &mut Registry,
 ) -> Result<(), CompilerErrorAtLine> {
     let name = namespace.unwrap_or("main");
-    let compiler = Compiler::new(name);
-    let chunk = compiler.compile(ast, symbols, registry, name)?.chunk;
+    let mut compiler = Compiler::new(name);
+    let chunk = compiler.compile(ast, symbols, registry, name)?;
     let qname = if let Some(namespace) = namespace {
         format!("{}/{}", namespace, "main")
     } else {
@@ -80,18 +81,20 @@ impl Compiler {
     }
 
     pub(crate) fn compile(
-        mut self,
+        &mut self,
         ast: &Vec<Statement>,
         symbols: &SymbolTable,
         registry: &mut Registry,
         namespace: &str,
-    ) -> Result<Self, CompilerErrorAtLine> {
+    ) -> Result<Chunk, CompilerErrorAtLine> {
         for statement in ast {
             self.compile_statement(statement, symbols, registry, namespace)?;
         }
 
         self.emit_byte(OP_RETURN);
-        Ok(self)
+        let chunk = self.chunk.clone();
+        self.chunk.code.clear(); // in case the compiler is reused, clear it for the next compilation. This is for the REPL
+        Ok(chunk)
     }
 
     fn raise(&self, error: CompilerError) -> CompilerErrorAtLine {

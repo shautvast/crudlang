@@ -81,6 +81,7 @@ impl Vm {
     }
 
     pub(crate) fn run(&mut self, context: &str, chunk: &Chunk) -> Result<Value, RuntimeError> {
+        self.ip = 0;
         loop {
             if self.error_occurred {
                 return Err(Something);

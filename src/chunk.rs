@@ -20,6 +20,12 @@ pub struct Chunk {
     pub vars: Vec<(TokenType, String)>,
 }
 
+impl Default for Chunk {
+    fn default() -> Self {
+        Chunk::new("")
+    }
+}
+
 impl Chunk {
     pub(crate) fn find_constant(&self, p0: &String) -> Option<usize> {
         for (i, constant) in self.constants.iter().enumerate() {

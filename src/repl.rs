@@ -1,7 +1,8 @@
 use crate::chunk::Chunk;
 use crate::errors::CrudLangError;
-use crate::vm::interpret;
-use crate::{map_underlying, recompile};
+use crate::scanner::scan;
+use crate::vm::{Vm, interpret};
+use crate::{ast_compiler, bytecode_compiler, map_underlying, recompile, symbol_builder};
 use arc_swap::ArcSwap;
 use std::collections::HashMap;
 use std::io;
@@ -12,6 +13,9 @@ use std::sync::Arc;
 pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudLangError> {
     println!("REPL started -- Type ctrl-c to exit (both the repl and the server)");
     println!(":h for help");
+    let mut symbol_table = HashMap::new();
+    let mut vm = Vm::new(&registry.load());
+    let mut bytecode_compiler = bytecode_compiler::Compiler::new("main");
     loop {
         print!(">");
         io::stdout().flush().map_err(map_underlying())?;
@@ -27,21 +31,27 @@ pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudL
             _ => {
                 let registry_copy = registry.load().clone();
                 let mut registry_copy = registry_copy.deref().clone();
-                match recompile(input, &mut registry_copy){
-                    Ok(_)=> {
+
+                let tokens = scan(input)?;
+
+                let ast = ast_compiler::compile(None, tokens, &mut symbol_table)?;
+                symbol_builder::build("", &ast, &mut symbol_table);
+
+                match bytecode_compiler.compile(&ast, &symbol_table, &mut registry_copy, "") {
+                    Ok(chunk) => {
+                        registry_copy.insert("main".to_string(), chunk);
                         registry.store(Arc::new(registry_copy));
 
-                        let result = match interpret(registry.load(), "main") {
+                        let result = match vm.run("main", registry.load().get("main").unwrap()) {
                             Ok(value) => value.to_string(),
                             Err(e) => e.to_string(),
                         };
                         println!("{}", result);
-                    },
-                    Err(e)  => {
+                    }
+                    Err(e) => {
                         println!("{}", e);
                     }
                 }
-
             }
         }
         // println!("[{}]",input);
