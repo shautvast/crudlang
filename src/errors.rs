@@ -69,6 +69,8 @@ pub enum CompilerError {
     IllegalIndexArgument(TokenType),
     #[error("Illegal argument: '{0}' cannot be indexed")]
     IllegalTypeToIndex(String),
+    #[error("The number of of arguments for {0} is not correct. Should be {1}, got {2}")]
+    IllegalArgumentsException(String,usize,usize),
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -87,6 +89,8 @@ pub enum RuntimeError {
     IllegalArgumentException(String),
     #[error("Expected {0}")]
     ExpectedType(String),
+    #[error("Index out of bounds: {0} > {1}")]
+    IndexOutOfBounds(usize, usize),
 }
 
 #[derive(Error, Debug, PartialEq)]

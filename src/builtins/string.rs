@@ -1,35 +1,35 @@
-use crate::builtins::{MethodMap, Parameter, Signature, add, expected};
+use crate::builtins::{FunctionMap, Parameter, Signature, add, expected};
 use crate::errors::RuntimeError;
 use crate::tokens::TokenType::{StringType, U64};
-use crate::value::{Value, bool, i64, string};
+use crate::value::{Value, bool, i64, string, u64};
 use regex::Regex;
 use std::collections::HashMap;
 
-pub(crate) fn string_methods() -> MethodMap {
-    let mut string_methods: MethodMap = HashMap::new();
-    let m = &mut string_methods;
-    add(m, "len", Signature::new(vec![], U64, string_len));
+pub(crate) fn string_functions() -> FunctionMap {
+    let mut string_functions: FunctionMap = HashMap::new();
+    let functions = &mut string_functions;
+    add(functions, "len", Signature::new(vec![], U64, string_len));
     add(
-        m,
+        functions,
         "to_uppercase",
         Signature::new(vec![], StringType, string_to_uppercase),
     );
     add(
-        m,
+        functions,
         "to_lowercase",
         Signature::new(vec![], StringType, string_to_lowercase),
     );
-    add(m, "contains", Signature::new(vec![], StringType, string_contains));
-    add(m, "reverse", Signature::new(vec![], StringType, string_reverse));
-    add(m, "trim", Signature::new(vec![], StringType, string_trim));
+    add(functions, "contains", Signature::new(vec![Parameter::new("key", StringType)], StringType, string_contains));
+    add(functions, "reverse", Signature::new(vec![], StringType, string_reverse));
+    add(functions, "trim", Signature::new(vec![], StringType, string_trim));
     add(
-        m,
+        functions,
         "trim_start",
         Signature::new(vec![], StringType, string_trim_start),
     );
-    add(m, "trim_end", Signature::new(vec![], StringType, string_trim_end));
+    add(functions, "trim_end", Signature::new(vec![], StringType, string_trim_end));
     add(
-        m,
+        functions,
         "replace_all",
         Signature::new(
             vec![
@@ -40,12 +40,12 @@ pub(crate) fn string_methods() -> MethodMap {
             string_replace_all,
         ),
     );
-    string_methods
+    string_functions
 }
 
 fn string_len(self_val: Value, _args: Vec<Value>) -> Result<Value, RuntimeError> {
     match self_val {
-        Value::String(s) => Ok(i64(s.len() as i64)),
+        Value::String(s) => Ok(u64(s.len() as u64)),
         _ => Err(expected_a_string()),
     }
 }
@@ -98,7 +98,6 @@ fn string_trim_end(self_val: Value, _: Vec<Value>) -> Result<Value, RuntimeError
         _ => Err(expected_a_string()),
     }
 }
-//TODO check arity in compiler (generically)
 fn string_replace_all(receiver: Value, args: Vec<Value>) -> Result<Value, RuntimeError> {
     let pattern = if let Value::String(s) = &args[0] {
         Regex::new(s).map_err(|_| RuntimeError::IllegalArgumentException("Invalid regex".into()))?

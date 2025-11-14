@@ -57,7 +57,7 @@ async fn main() -> Result<(), CrudLangError> {
         );
 
         if args.repl {
-            std::thread::spawn(move || tipi_lang::repl::start(swap.clone()).unwrap());
+            let _ = std::thread::spawn(move || tipi_lang::repl::start(swap.clone()));
         }
 
         axum::serve(listener, app).await.map_err(map_underlying())?;

@@ -1,24 +1,26 @@
 mod string;
+mod list;
 
-use crate::builtins::string::string_methods;
+use crate::builtins::string::string_functions;
 use crate::errors::{CompilerError, RuntimeError};
 use crate::tokens::TokenType;
 use crate::value::Value;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use crate::ast_compiler::Parameter;
+use crate::builtins::list::list_functions;
 
 pub(crate) struct Signature {
     pub(crate) parameters: Vec<Parameter>,
     pub(crate) return_type: TokenType,
-    pub(crate) function: MethodFn,
+    pub(crate) function: FunctionFn,
 }
 
 impl Signature {
     pub(crate) fn new(
         parameters: Vec<Parameter>,
         return_type: TokenType,
-        function: MethodFn,
+        function: FunctionFn,
     ) -> Self {
         Self {
             parameters,
@@ -32,17 +34,19 @@ impl Signature {
     }
 }
 
-pub(crate) type MethodFn = fn(Value, Vec<Value>) -> Result<Value, RuntimeError>;
-pub(crate) type MethodMap = HashMap<String, Signature>;
-pub(crate) type MethodTable = HashMap<String, MethodMap>;
+pub(crate) type FunctionFn = fn(Value, Vec<Value>) -> Result<Value, RuntimeError>;
+pub(crate) type FunctionMap = HashMap<String, Signature>;
+pub(crate) type FunctionTable = HashMap<String, FunctionMap>;
 
-static METHODS: LazyLock<MethodTable> = LazyLock::new(|| {
-    let mut table: MethodTable = HashMap::new();
-    table.insert("string".to_string(), string_methods());
+static METHODS: LazyLock<FunctionTable> = LazyLock::new(|| {
+    let mut table: FunctionTable = HashMap::new();
+    table.insert("string".to_string(), string_functions());
+    table.insert("list".to_string(), list_functions());
+
     table
 });
 
-pub(crate) fn add(m: &mut MethodMap, name: &str, method: Signature) {
+pub(crate) fn add(m: &mut FunctionMap, name: &str, method: Signature) {
     m.insert(name.to_string(), method);
 }
 

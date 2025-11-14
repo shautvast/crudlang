@@ -34,7 +34,13 @@ pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudL
 
                 let tokens = scan(input)?;
 
-                let ast = ast_compiler::compile(None, tokens, &mut symbol_table)?;
+                let ast = match ast_compiler::compile(None, tokens, &mut symbol_table){
+                    Ok(ast) => ast,
+                    Err(e) => {
+                        println!("{}", e);
+                        continue;
+                    }
+                };
                 symbol_builder::build("", &ast, &mut symbol_table);
 
                 match bytecode_compiler.compile(&ast, &symbol_table, &mut registry_copy, "") {

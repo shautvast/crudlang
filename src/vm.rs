@@ -156,13 +156,7 @@ impl Vm {
                     let index = self.read(chunk);
                     let (var_type, name) = chunk.vars.get(index).unwrap();
                     let value = self.pop();
-                    let value = match var_type {
-                        TokenType::U32 => value.cast_u32()?,
-                        TokenType::U64 => value.cast_u64()?,
-                        TokenType::F32 => value.cast_f32()?,
-                        TokenType::I32 => value.cast_i32()?,
-                        _ => value,
-                    };
+                    let value = Self::number(var_type, value)?;
                     self.local_vars.insert(name.to_string(), value);
                 }
                 OP_DEF_MAP => {
@@ -178,8 +172,8 @@ impl Vm {
                 OP_GET => {
                     let var_index = self.read(chunk);
                     let (_, name_index) = chunk.vars.get(var_index).unwrap();
-                    let value = self.local_vars.get(name_index).unwrap();
-                    self.push(value.clone()); // not happy , take ownership, no clone
+                    let value = self.local_vars.remove(name_index).unwrap();
+                    self.push(value);
                 }
                 OP_LIST_GET => {
                     let index = self.pop();
@@ -204,6 +198,9 @@ impl Vm {
                     let receiver = self.pop();
                     let return_value = crate::builtins::call(&receiver_type_name, &function_name, receiver, args)?;
                     self.push(return_value);
+                }
+                OP_POP =>{
+                    self.pop(); // discards the value
                 }
                 OP_CALL => {
                     let function_name_index = self.read(chunk);
@@ -257,6 +254,17 @@ impl Vm {
                 _ => {}
             }
         }
+    }
+
+    fn number(var_type: &TokenType, value: Value) -> Result<Value, RuntimeError> {
+        let value = match var_type {
+            TokenType::U32 => value.cast_u32()?,
+            TokenType::U64 => value.cast_u64()?,
+            TokenType::F32 => value.cast_f32()?,
+            TokenType::I32 => value.cast_i32()?,
+            _ => value,
+        };
+        Ok(value)
     }
 
     fn read(&mut self, chunk: &Chunk) -> usize {

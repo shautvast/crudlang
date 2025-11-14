@@ -3,6 +3,7 @@ use crate::ast_compiler::{Expression, Function, Parameter, Statement};
 use crate::builtins::lookup;
 use crate::chunk::Chunk;
 use crate::errors::CompilerError::{IncompatibleTypes, UndeclaredVariable};
+use crate::errors::RuntimeError::IllegalArgumentsException;
 use crate::errors::{CompilerError, CompilerErrorAtLine};
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType;
@@ -12,11 +13,12 @@ use crate::vm::{
     OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CALL_BUILTIN,
     OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER,
     OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR,
-    OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+    OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
 use crate::{Registry, SymbolTable};
+use clap::arg;
 use std::collections::HashMap;
-use std::mem;
+use std::ops::Deref;
 
 pub fn compile(
     qualified_name: Option<&str>,
@@ -216,7 +218,13 @@ impl Compiler {
                         .add_constant(Value::String(method_name.to_string()))
                 });
                 let signature = lookup(&receiver_type, method_name).map_err(|e| self.raise(e))?;
-
+                if signature.parameters.len() != arguments.len() {
+                    return Err(self.raise(CompilerError::IllegalArgumentsException(
+                        format!("{}.{}", receiver_type, method_name),
+                        signature.parameters.len(),
+                        arguments.len(),
+                    )));
+                }
                 self.get_arguments_in_order(
                     namespace,
                     symbols,
@@ -279,22 +287,31 @@ impl Compiler {
                 self.compile_expression(namespace, left, symbols, registry)?;
                 self.compile_expression(namespace, right, symbols, registry)?;
                 match operator.token_type {
-                    TokenType::Plus => self.emit_byte(OP_ADD),
-                    TokenType::Minus => self.emit_byte(OP_SUBTRACT),
-                    TokenType::Star => self.emit_byte(OP_MULTIPLY),
-                    TokenType::Slash => self.emit_byte(OP_DIVIDE),
                     TokenType::BitAnd => self.emit_byte(OP_BITAND),
-                    TokenType::Pipe => self.emit_byte(OP_BITOR),
                     TokenType::BitXor => self.emit_byte(OP_BITXOR),
-                    TokenType::GreaterGreater => self.emit_byte(OP_SHR),
-                    TokenType::LessLess => self.emit_byte(OP_SHL),
+                    TokenType::Equal => {
+                        if let Expression::Variable { name, .. } = left.deref() {
+                            let index = self.vars.get(name).unwrap();
+                            self.emit_bytes(OP_ASSIGN, *index as u16);
+                            self.emit_byte(OP_POP);
+                        } else {
+                            return Err(self.raise(UndeclaredVariable("".to_string())));
+                        }
+                    }
                     TokenType::EqualEqual => self.emit_byte(OP_EQUAL),
                     TokenType::Greater => self.emit_byte(OP_GREATER),
                     TokenType::GreaterEqual => self.emit_byte(OP_GREATER_EQUAL),
+                    TokenType::GreaterGreater => self.emit_byte(OP_SHR),
                     TokenType::Less => self.emit_byte(OP_LESS),
                     TokenType::LessEqual => self.emit_byte(OP_LESS_EQUAL),
+                    TokenType::LessLess => self.emit_byte(OP_SHL),
                     TokenType::LogicalAnd => self.emit_byte(OP_AND),
                     TokenType::LogicalOr => self.emit_byte(OP_OR),
+                    TokenType::Minus => self.emit_byte(OP_SUBTRACT),
+                    TokenType::Pipe => self.emit_byte(OP_BITOR),
+                    TokenType::Plus => self.emit_byte(OP_ADD),
+                    TokenType::Slash => self.emit_byte(OP_DIVIDE),
+                    TokenType::Star => self.emit_byte(OP_MULTIPLY),
                     _ => unimplemented!("binary other than plus, minus, star, slash"),
                 }
             }

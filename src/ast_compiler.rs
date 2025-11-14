@@ -68,7 +68,6 @@ impl AstCompiler {
         &mut self,
         symbol_table: &mut SymbolTable,
     ) -> Result<Vec<Statement>, CompilerErrorAtLine> {
-        self.current_line();
         if !self.had_error {
             let mut statements = vec![];
             while !self.is_at_end() {
@@ -365,8 +364,17 @@ impl AstCompiler {
     }
 
     fn bit_xor(&mut self, symbol_table: &mut SymbolTable) -> Expr {
-        let expr = self.equality(symbol_table)?;
+        let expr = self.assignment(symbol_table)?;
         self.binary(&[TokenType::BitXor], expr, symbol_table)
+    }
+
+    fn assignment(&mut self, symbol_table: &mut SymbolTable) -> Expr {
+        let expr = self.equality(symbol_table)?;
+        self.binary(
+            &[TokenType::Equal],
+            expr,
+            symbol_table,
+        )
     }
 
     fn equality(&mut self, symbol_table: &mut SymbolTable) -> Expr {

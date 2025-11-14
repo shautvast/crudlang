@@ -1,8 +1,12 @@
 #[cfg(test)]
 mod tests {
+    use crate::errors::CompilerError::IllegalArgumentsException;
+    use crate::errors::CompilerErrorAtLine;
+    use crate::errors::CrudLangError::{Compiler, Runtime};
     use crate::value::{Value, string};
     use crate::{compile, run};
     use chrono::DateTime;
+    use crate::errors::RuntimeError::{IllegalArgumentException, IndexOutOfBounds};
 
     #[test]
     fn literal_int() {
@@ -165,14 +169,8 @@ p"#);
         assert!(result.is_ok());
         let result = result.unwrap();
         if let Value::Map(map) = result {
-            assert_eq!(
-                map.get(&string("name")).unwrap(),
-                &string("Dent")
-            );
-            assert_eq!(
-                map.get(&string("age")).unwrap(),
-                &Value::I64(40)
-            );
+            assert_eq!(map.get(&string("name")).unwrap(), &string("Dent"));
+            assert_eq!(map.get(&string("age")).unwrap(), &Value::I64(40));
         }
     }
 
@@ -183,10 +181,7 @@ m"#);
 
         let result = result.unwrap();
         if let Value::Map(map) = result {
-            assert_eq!(
-                map.get(&string("name")).unwrap(),
-                &string("Dent")
-            );
+            assert_eq!(map.get(&string("name")).unwrap(), &string("Dent"));
         }
     }
 
@@ -267,12 +262,62 @@ date"#),
 
     #[test]
     fn string_len() {
-        assert_eq!(run(r#""abc".len()"#), Ok(Value::I64(3)));
+        assert_eq!(run(r#""abc".len()"#), Ok(Value::U64(3)));
     }
 
     #[test]
     fn string_replace() {
         assert_eq!(run(r#""Hello".replace_all("l","p")"#), Ok(string("Heppo")));
+    }
+
+    #[test]
+    fn string_replace_wrong_nr_of_args() {
+        assert_eq!(
+            run(r#""Hello".replace_all("l")"#),
+            Err(Compiler(CompilerErrorAtLine {
+                error: IllegalArgumentsException("string.replace_all".to_string(), 2, 1),
+                line: 1
+            }))
+        );
+    }
+
+    #[test]
+    fn string_replace_wrong_type_of_args() {
+        assert_eq!(
+            run(r#""Hello".replace_all("l", 1)"#),
+            Err(Runtime(IllegalArgumentException("Illegal replacement. Expected a string but got 1".to_string())))
+        );
+    }
+
+    #[test]
+    fn string_contains() {
+        assert_eq!(run(r#""Hello".contains("l")"#), Ok(Value::Bool(true)));
+    }
+
+    #[test]
+    fn list_length(){
+        assert_eq!(run(r#"[1,2,3].len()"#), Ok(Value::U64(3)));
+    }
+
+    #[test]
+    fn list_push(){
+        assert_eq!(run(r#"[1,2].push(3)"#), Ok(Value::List(vec![Value::I64(1), Value::I64(2), Value::I64(3)])));
+    }
+
+    #[test]
+    fn list_remove(){
+        assert_eq!(run(r#"[1,2,3].remove(0)"#), Ok(Value::List(vec![Value::I64(2), Value::I64(3)])));
+    }
+
+    #[test]
+    fn list_remove_out_of_bounds(){
+        assert_eq!(run(r#"[1,2,3].remove(4)"#), Err(Runtime(IndexOutOfBounds(4, 3))));
+    }
+
+    #[test]
+    fn reassign(){
+        assert_eq!(run(r#"let a=1
+a=2"#), Ok(Value::Void));
     }
 
     // #[test]

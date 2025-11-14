@@ -40,6 +40,10 @@ pub(crate) fn i64(v: impl Into<i64>) -> Value {
     Value::I64(v.into())
 }
 
+pub(crate) fn u64(v: impl Into<u64>) -> Value {
+    Value::U64(v.into())
+}
+
 pub(crate) fn bool(v: impl Into<bool>) -> Value {
     Value::Bool(v.into())
 }
@@ -419,6 +423,7 @@ impl PartialEq for Value {
                 equal
             }
             // TODO objects
+            (Value::Void, Value::Void) => true,
             _ => false, //?
         }
     }

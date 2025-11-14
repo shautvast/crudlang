@@ -19,6 +19,7 @@ impl Token {
 
 #[derive(Debug, PartialEq, Clone, Hash)]
 pub enum TokenType {
+    Any,
     Bang,
     BangEqual,
     BitAnd,
@@ -93,6 +94,7 @@ pub enum TokenType {
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            TokenType::Any => write!(f, "any"),
             TokenType::StringType => write!(f, "string"),
             TokenType::DateTime => write!(f, "datetime"),
             TokenType::Char => write!(f, "char"),
