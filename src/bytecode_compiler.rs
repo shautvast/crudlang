@@ -1,5 +1,6 @@
 use crate::ast_compiler::Expression::NamedParameter;
 use crate::ast_compiler::{Expression, Function, Parameter, Statement};
+use crate::builtins::lookup;
 use crate::chunk::Chunk;
 use crate::errors::CompilerError::{IncompatibleTypes, UndeclaredVariable};
 use crate::errors::{CompilerError, CompilerErrorAtLine};
@@ -205,17 +206,24 @@ impl Compiler {
                 self.compile_expression(namespace, receiver, symbols, registry)?;
                 let receiver_type = infer_type(receiver, symbols).to_string();
 
-                let type_index = self
-                    .chunk
-                    .find_constant(&receiver_type)
-                    .unwrap_or_else(|| self.chunk.add_constant(Value::String(receiver_type)));
+                let type_index = self.chunk.find_constant(&receiver_type).unwrap_or_else(|| {
+                    self.chunk
+                        .add_constant(Value::String(receiver_type.clone()))
+                });
 
                 let name_index = self.chunk.find_constant(method_name).unwrap_or_else(|| {
                     self.chunk
                         .add_constant(Value::String(method_name.to_string()))
                 });
-                //TODO lookup parameters for builtin
-                self.get_arguments_in_order(namespace, symbols, registry, arguments, &vec![])?;
+                let signature = lookup(&receiver_type, method_name).map_err(|e| self.raise(e))?;
+
+                self.get_arguments_in_order(
+                    namespace,
+                    symbols,
+                    registry,
+                    arguments,
+                    &signature.parameters,
+                )?;
                 self.emit_byte(OP_CALL_BUILTIN);
                 self.emit_byte(name_index as u16);
                 self.emit_byte(type_index as u16);
@@ -312,19 +320,17 @@ impl Compiler {
         namespace: &str,
         symbols: &SymbolTable,
         registry: &mut Registry,
-        arguments: &Vec<Expression>,
-        parameters: &Vec<Parameter>,
+        arguments: &[Expression],
+        parameters: &[Parameter],
     ) -> Result<(), CompilerErrorAtLine> {
-        for parameter in parameters {
-            for argument in arguments {
+        for argument in arguments {
+            for parameter in parameters {
                 if let NamedParameter { name, value, .. } = argument {
                     if name.lexeme == parameter.name.lexeme {
                         let value_type = infer_type(value, symbols);
                         if parameter.var_type != value_type {
-                            return Err(self.raise(CompilerError::IncompatibleTypes(
-                                parameter.var_type.clone(),
-                                value_type,
-                            )));
+                            return Err(self
+                                .raise(IncompatibleTypes(parameter.var_type.clone(), value_type)));
                         } else {
                             self.compile_expression(namespace, argument, symbols, registry)?;
                             break;

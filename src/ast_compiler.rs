@@ -146,7 +146,7 @@ impl AstCompiler {
                 self.query_guard_expr(symbol_table)
             } else {
                 Err(self.raise(Expected("-> or ?")))
-            }
+            };
         }
         Ok(Stop {
             line: self.peek().line,
@@ -801,6 +801,19 @@ impl Statement {
 pub struct Parameter {
     pub(crate) name: Token,
     pub(crate) var_type: TokenType,
+}
+
+impl Parameter {
+    pub(crate) fn new(name: impl Into<String>, value_type: TokenType) -> Self {
+        Self {
+            name: Token {
+                token_type: TokenType::StringType,
+                lexeme: name.into(),
+                line: 0,
+            },
+            var_type: value_type,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

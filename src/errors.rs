@@ -83,6 +83,8 @@ pub enum RuntimeError {
     FunctionNotFound(String),
     #[error("The number of of arguments for {0} is not correct. Should be {1}, got {2}")]
     IllegalArgumentsException(String,usize,usize),
+    #[error("{0}")]
+    IllegalArgumentException(String),
     #[error("Expected {0}")]
     ExpectedType(String),
 }

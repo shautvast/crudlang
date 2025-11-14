@@ -25,3 +25,4 @@ url = "2.5.7"
 clap = { version = "4.5.51", features = ["derive"] }
 notify = "8.2.0"
 arc-swap = "1.7.1"
+regex = "1.12.2"

@@ -194,7 +194,6 @@ impl Vm {
                     let function_type_index = self.read(chunk);
                     let receiver_type_name = chunk.constants[function_type_index].to_string();
 
-                    let receiver = self.pop();
                     let num_args = self.read(chunk);
                     let mut args = vec![];
                     for _ in 0..num_args {
@@ -202,6 +201,7 @@ impl Vm {
                         args.push(arg);
                     }
                     args.reverse();
+                    let receiver = self.pop();
                     let return_value = crate::builtins::call(&receiver_type_name, &function_name, receiver, args)?;
                     self.push(return_value);
                 }

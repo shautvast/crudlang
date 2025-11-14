@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::value::Value;
+    use crate::value::{Value, string};
     use crate::{compile, run};
     use chrono::DateTime;
 
@@ -21,23 +21,20 @@ mod tests {
 
     #[test]
     fn literal_string() {
-        assert_eq!(run(r#""a""#), Ok(Value::String("a".into())));
+        assert_eq!(run(r#""a""#), Ok(string("a")));
     }
 
     #[test]
     fn literal_list() {
         assert_eq!(
             run(r#"["abc","def"]"#),
-            Ok(Value::List(vec![
-                Value::String("abc".into()),
-                Value::String("def".into())
-            ]))
+            Ok(Value::List(vec![string("abc"), string("def")]))
         );
     }
 
     #[test]
     fn index_in_list_literal() {
-        assert_eq!(run(r#"["abc","def"][1]"#), Ok(Value::String("def".into())))
+        assert_eq!(run(r#"["abc","def"][1]"#), Ok(string("def")))
     }
 
     #[test]
@@ -45,7 +42,7 @@ mod tests {
         assert_eq!(
             run(r#"let a:list = ["abc","def"]
 a[1]"#),
-            Ok(Value::String("def".into()))
+            Ok(string("def"))
         )
     }
 
@@ -118,7 +115,7 @@ a"#),
             run(r#"fn add_hello(name: string) -> string:
     "Hello " + name
 add_hello("world")"#),
-            Ok(Value::String("Hello world".to_string()))
+            Ok(string("Hello world"))
         );
     }
 
@@ -169,11 +166,11 @@ p"#);
         let result = result.unwrap();
         if let Value::Map(map) = result {
             assert_eq!(
-                map.get(&Value::String("name".to_string())).unwrap(),
-                &Value::String("Dent".to_string())
+                map.get(&string("name")).unwrap(),
+                &string("Dent")
             );
             assert_eq!(
-                map.get(&Value::String("age".to_string())).unwrap(),
+                map.get(&string("age")).unwrap(),
                 &Value::I64(40)
             );
         }
@@ -187,8 +184,8 @@ m"#);
         let result = result.unwrap();
         if let Value::Map(map) = result {
             assert_eq!(
-                map.get(&Value::String("name".to_string())).unwrap(),
-                &Value::String("Dent".to_string())
+                map.get(&string("name")).unwrap(),
+                &string("Dent")
             );
         }
     }
@@ -216,17 +213,17 @@ m["name"]"#);
 
     #[test]
     fn add_strings() {
-        assert_eq!(run(r#""a"+"b""#), Ok(Value::String("ab".into())));
+        assert_eq!(run(r#""a"+"b""#), Ok(string("ab")));
     }
 
     #[test]
     fn add_string_and_int() {
-        assert_eq!(run(r#""a"+42"#), Ok(Value::String("a42".into())));
+        assert_eq!(run(r#""a"+42"#), Ok(string("a42")));
     }
 
     #[test]
     fn add_string_and_bool() {
-        assert_eq!(run(r#""a"+false"#), Ok(Value::String("afalse".into())));
+        assert_eq!(run(r#""a"+false"#), Ok(string("afalse")));
     }
 
     #[test]
@@ -259,18 +256,23 @@ date"#),
     }
 
     #[test]
-    fn string_reverse(){
-        assert_eq!(run(r#""abc".reverse()"#), Ok(Value::String("cba".into())));
+    fn string_reverse() {
+        assert_eq!(run(r#""abc".reverse()"#), Ok(string("cba")));
     }
 
     #[test]
-    fn string_to_upper(){
-        assert_eq!(run(r#""abc".to_uppercase()"#), Ok(Value::String("ABC".into())));
+    fn string_to_upper() {
+        assert_eq!(run(r#""abc".to_uppercase()"#), Ok(string("ABC")));
     }
 
     #[test]
-    fn string_len(){
+    fn string_len() {
         assert_eq!(run(r#""abc".len()"#), Ok(Value::I64(3)));
+    }
+
+    #[test]
+    fn string_replace() {
+        assert_eq!(run(r#""Hello".replace_all("l","p")"#), Ok(string("Heppo")));
     }
 
     // #[test]
