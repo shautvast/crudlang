@@ -1,7 +1,7 @@
 use crate::builtins::{FunctionMap, Parameter, Signature, add, expected};
 use crate::errors::RuntimeError;
 use crate::tokens::TokenType::{StringType, U64};
-use crate::value::{Value, bool, i64, string, u64};
+use crate::value::{Value, bool, string, u64};
 use regex::Regex;
 use std::collections::HashMap;
 

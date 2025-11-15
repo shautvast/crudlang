@@ -251,6 +251,15 @@ impl Vm {
                         self.push(result);
                     }
                 }
+                OP_IF => {
+                    let condition = self.pop();
+                    if condition == Value::Bool(true) {
+                        if let Some(then) = self.registry.get(&format!("{}.?",chunk.name)){
+                            let result = interpret_function(then, vec![])?;
+                            self.push(result);
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -284,7 +293,7 @@ impl Vm {
     fn pop(&mut self) -> Value {
         self.stack
             .pop()
-            .unwrap_or_else(|| Value::Error("Error occurred".to_string()))
+            .unwrap_or_else(|| Value::Error("Stack underflow".to_string()))
     }
 }
 
@@ -362,3 +371,5 @@ pub const OP_DEF_F64: u16 = 40;
 pub const OP_ASSIGN: u16 = 41;
 pub const OP_LIST_GET: u16 = 42;
 pub const OP_CALL_BUILTIN: u16 = 43;
+pub const OP_IF: u16 = 44;
+pub const OP_IF_ELSE: u16 = 45;

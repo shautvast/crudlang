@@ -1,4 +1,5 @@
 use crate::ast_compiler::{Expression, Parameter, Statement};
+use crate::builtins::{Signature, lookup};
 use crate::errors::CompilerError;
 use crate::errors::CompilerError::IncompatibleTypes;
 use crate::tokens::TokenType::{
@@ -9,6 +10,7 @@ use crate::tokens::TokenType::{
 use crate::tokens::{Token, TokenType};
 use log::debug;
 use std::collections::HashMap;
+use std::ops::Deref;
 
 pub enum Symbol {
     Function {
@@ -192,7 +194,21 @@ pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> Token
                 _ => Unknown,
             }
         }
-        Expression::MethodCall { receiver, .. } => infer_type(receiver, symbols),
+        Expression::MethodCall {
+            receiver,
+            method_name,
+            ..
+        } => {
+            if let Expression::Literal { value, .. } = receiver.deref() {
+                if let Ok(signature) = lookup(&value.to_string(), method_name) {
+                    signature.return_type.clone()
+                } else {
+                    unreachable!()//?
+                }
+            } else {
+                infer_type(receiver, symbols)
+            }
+        }
         Expression::Stop { .. } => TokenType::Unknown,
         // Expression::PathMatch { .. } => TokenType::Unknown,
         Expression::NamedParameter { .. } => TokenType::Unknown,

@@ -6,12 +6,7 @@ use crate::errors::CompilerError::{
 };
 use crate::errors::CompilerErrorAtLine;
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
-use crate::tokens::TokenType::{
-    Bang, Bool, Char, Colon, DateTime, Dot, Eof, Eol, Equal, False, FloatingPoint, Fn, Greater,
-    GreaterEqual, GreaterGreater, Identifier, Indent, Integer, LeftBrace, LeftBracket, LeftParen,
-    Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightBrace,
-    RightBracket, RightParen, SingleRightArrow, Slash, Star, StringType, True, U32, U64, Unknown,
-};
+use crate::tokens::TokenType::{Bang, Bool, Char, Colon, DateTime, Dot, Eof, Eol, Equal, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater, Identifier, If, Indent, Integer, LeftBrace, LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightBrace, RightBracket, RightParen, SingleRightArrow, Slash, Star, StringType, True, U32, U64, Unknown, Else};
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use crate::{Expr, Stmt, SymbolTable};
@@ -261,8 +256,7 @@ impl AstCompiler {
         self.consume(&Colon, Expected("colon (:) after function declaration."))?;
         self.consume(&Eol, Expected("end of line."))?;
 
-        let current_indent = self.indent.last().unwrap();
-        self.indent.push(current_indent + 1);
+        self.inc_indent();
 
         let body = self.compile(symbol_table)?;
 
@@ -320,9 +314,34 @@ impl AstCompiler {
     fn statement(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
         if self.match_token(&[Print]) {
             self.print_statement(symbol_table)
+        } else if self.match_token(&[If]) {
+            self.if_statement(symbol_table)
         } else {
             self.expr_statement(symbol_table)
         }
+    }
+
+    fn if_statement(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
+        let condition = self.expression(symbol_table)?;
+        self.consume(&Colon, Expected("':' after if condition."))?;
+
+        self.inc_indent();
+        let then_branch = self.compile(symbol_table)?;
+
+        let else_branch = if self.check(&Else) {
+            self.consume(&Else, Expected("'else' after if condition."))?;
+            self.consume(&Colon, Expected("':' after 'else'."))?;
+
+            self.inc_indent();
+            Some(self.compile(symbol_table)?)
+        } else {
+            None
+        };
+        Ok(Statement::IfStatement {condition, then_branch, else_branch})
+    }
+
+    fn inc_indent(&mut self) {
+        self.indent.push(self.indent.last().unwrap() + 1);
     }
 
     fn print_statement(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
@@ -370,11 +389,7 @@ impl AstCompiler {
 
     fn assignment(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.equality(symbol_table)?;
-        self.binary(
-            &[TokenType::Equal],
-            expr,
-            symbol_table,
-        )
+        self.binary(&[TokenType::Equal], expr, symbol_table)
     }
 
     fn equality(&mut self, symbol_table: &mut SymbolTable) -> Expr {
@@ -790,6 +805,11 @@ pub enum Statement {
         if_expr: Expression,
         then_expr: Expression,
     },
+    IfStatement{
+        condition: Expression,
+        then_branch: Vec<Statement>,
+        else_branch: Option<Vec<Statement>>
+    }
 }
 
 impl Statement {
@@ -801,6 +821,7 @@ impl Statement {
             Statement::FunctionStmt { function, .. } => function.name.line,
             Statement::ObjectStmt { name, .. } => name.line,
             Statement::GuardStatement { if_expr, .. } => if_expr.line(),
+            Statement::IfStatement { condition, .. } => condition.line(),
         }
     }
 }

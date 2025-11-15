@@ -3,20 +3,18 @@ use crate::ast_compiler::{Expression, Function, Parameter, Statement};
 use crate::builtins::lookup;
 use crate::chunk::Chunk;
 use crate::errors::CompilerError::{IncompatibleTypes, UndeclaredVariable};
-use crate::errors::RuntimeError::IllegalArgumentsException;
 use crate::errors::{CompilerError, CompilerErrorAtLine};
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType;
 use crate::tokens::TokenType::Unknown;
-use crate::value::Value;
+use crate::value::{Value};
 use crate::vm::{
     OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CALL_BUILTIN,
     OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER,
-    OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR,
-    OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+    OP_GREATER_EQUAL, OP_IF, OP_IF_ELSE, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY,
+    OP_NEGATE, OP_NOT, OP_OR, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
 use crate::{Registry, SymbolTable};
-use clap::arg;
 use std::collections::HashMap;
 use std::ops::Deref;
 
@@ -57,12 +55,7 @@ pub(crate) fn compile_in_namespace(
     let name = namespace.unwrap_or("main");
     let mut compiler = Compiler::new(name);
     let chunk = compiler.compile(ast, symbols, registry, name)?;
-    let qname = if let Some(namespace) = namespace {
-        format!("{}/{}", namespace, "main")
-    } else {
-        "main".to_string()
-    };
-    registry.insert(qname, chunk);
+    registry.insert(name.to_string(), chunk);
     Ok(())
 }
 
@@ -157,6 +150,30 @@ impl Compiler {
             Statement::GuardStatement { .. } => {
                 unimplemented!("guard statement")
             }
+            Statement::IfStatement {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                self.compile_expression(namespace, condition, symbols, registry)?;
+                compile(
+                    Some(&format!("{}.?",namespace)),
+                    then_branch,
+                    symbols,
+                    registry,
+                )?;
+                if else_branch.is_none() {
+                    self.emit_byte(OP_IF);
+                } else {
+                    self.emit_byte(OP_IF_ELSE);
+                    compile(
+                        Some(format!("{}.:", namespace).as_str()),
+                        else_branch.as_ref().unwrap(),
+                        symbols,
+                        registry,
+                    )?;
+                }
+            }
         }
         Ok(())
     }
@@ -218,7 +235,7 @@ impl Compiler {
                         .add_constant(Value::String(method_name.to_string()))
                 });
                 let signature = lookup(&receiver_type, method_name).map_err(|e| self.raise(e))?;
-                if signature.parameters.len() != arguments.len() {
+                if signature.arity() != arguments.len() {
                     return Err(self.raise(CompilerError::IllegalArgumentsException(
                         format!("{}.{}", receiver_type, method_name),
                         signature.parameters.len(),

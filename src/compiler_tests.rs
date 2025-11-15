@@ -3,10 +3,10 @@ mod tests {
     use crate::errors::CompilerError::IllegalArgumentsException;
     use crate::errors::CompilerErrorAtLine;
     use crate::errors::CrudLangError::{Compiler, Runtime};
+    use crate::errors::RuntimeError::{IllegalArgumentException, IndexOutOfBounds};
     use crate::value::{Value, string};
     use crate::{compile, run};
     use chrono::DateTime;
-    use crate::errors::RuntimeError::{IllegalArgumentException, IndexOutOfBounds};
 
     #[test]
     fn literal_int() {
@@ -285,7 +285,9 @@ date"#),
     fn string_replace_wrong_type_of_args() {
         assert_eq!(
             run(r#""Hello".replace_all("l", 1)"#),
-            Err(Runtime(IllegalArgumentException("Illegal replacement. Expected a string but got 1".to_string())))
+            Err(Runtime(IllegalArgumentException(
+                "Illegal replacement. Expected a string but got 1".to_string()
+            )))
         );
     }
 
@@ -295,29 +297,56 @@ date"#),
     }
 
     #[test]
-    fn list_length(){
+    fn list_length() {
         assert_eq!(run(r#"[1,2,3].len()"#), Ok(Value::U64(3)));
     }
 
     #[test]
-    fn list_push(){
-        assert_eq!(run(r#"[1,2].push(3)"#), Ok(Value::List(vec![Value::I64(1), Value::I64(2), Value::I64(3)])));
+    fn list_push() {
+        assert_eq!(
+            run(r#"[1,2].push(3)"#),
+            Ok(Value::List(vec![
+                Value::I64(1),
+                Value::I64(2),
+                Value::I64(3)
+            ]))
+        );
     }
 
     #[test]
-    fn list_remove(){
-        assert_eq!(run(r#"[1,2,3].remove(0)"#), Ok(Value::List(vec![Value::I64(2), Value::I64(3)])));
+    fn list_remove() {
+        assert_eq!(
+            run(r#"[1,2,3].remove(0)"#),
+            Ok(Value::List(vec![Value::I64(2), Value::I64(3)]))
+        );
     }
 
     #[test]
-    fn list_remove_out_of_bounds(){
-        assert_eq!(run(r#"[1,2,3].remove(4)"#), Err(Runtime(IndexOutOfBounds(4, 3))));
+    fn list_remove_out_of_bounds() {
+        assert_eq!(
+            run(r#"[1,2,3].remove(4)"#),
+            Err(Runtime(IndexOutOfBounds(4, 3)))
+        );
     }
 
     #[test]
-    fn reassign(){
-        assert_eq!(run(r#"let a=1
-a=2"#), Ok(Value::Void));
+    fn reassign() {
+        assert_eq!(
+            run(r#"let a=1
+a=2"#),
+            Ok(Value::Void)
+        );
+    }
+
+    #[test]
+    fn if_expr() {
+        assert_eq!(
+            run(r#"
+if true:
+  2
+"#),
+            Ok(Value::I64(2))
+        );
     }
 
     // #[test]
