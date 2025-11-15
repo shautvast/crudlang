@@ -339,10 +339,47 @@ a=2"#),
     }
 
     #[test]
-    fn if_expr() {
+    fn simple_if_expr() {
         assert_eq!(
             run(r#"
 if true:
+  2
+"#),
+            Ok(Value::I64(2))
+        );
+    }
+
+    #[test]
+    fn if_expr() {
+        assert_eq!(
+            run(r#"
+if 1==1:
+  2
+"#),
+            Ok(Value::I64(2))
+        );
+    }
+
+    #[test]
+    fn if_var_expr() {
+        assert_eq!(
+            run(r#"
+let a=1
+if a==1:
+  2
+"#),
+            Ok(Value::I64(2))
+        );
+    }
+
+    #[test]
+    fn if_var_expr_else() {
+        assert_eq!(
+            run(r#"
+let a=1
+if a==2:
+  1
+else:
   2
 "#),
             Ok(Value::I64(2))

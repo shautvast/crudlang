@@ -260,6 +260,22 @@ impl Vm {
                         }
                     }
                 }
+                OP_IF_ELSE => {
+                    let condition = self.pop();
+                    self.push(if condition == Value::Bool(true) {
+                        if let Some(then) = self.registry.get(&format!("{}.?",chunk.name)){
+                            interpret_function(then, vec![])?
+                        } else {
+                            return Err(Something);
+                        }
+                    } else {
+                        if let Some(then) = self.registry.get(&format!("{}.:",chunk.name)){
+                            interpret_function(then, vec![])?
+                        } else {
+                            return Err(Something);
+                        }
+                    });
+                }
                 _ => {}
             }
         }
