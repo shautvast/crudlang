@@ -250,30 +250,12 @@ impl Vm {
                         self.push(result);
                     }
                 }
-                OP_IF => {
-                    let condition = self.pop();
-                    if condition == Value::Bool(true) {
-                        if let Some(then) = self.registry.get(&format!("{}.?", chunk.name)) {
-                            let result = interpret_function(then, vec![])?;
-                            self.push(result);
-                        }
+                OP_GOTO_NIF => {
+                    let b = self.pop();
+                    let goto_addr = self.read(chunk);
+                    if b == Value::Bool(false) {
+                        self.ip = goto_addr;
                     }
-                }
-                OP_IF_ELSE => {
-                    let condition = self.pop();
-                    self.push(if condition == Value::Bool(true) {
-                        if let Some(then) = self.registry.get(&format!("{}.?", chunk.name)) {
-                            interpret_function(then, vec![])?
-                        } else {
-                            return Err(Something);
-                        }
-                    } else {
-                        if let Some(then) = self.registry.get(&format!("{}.:", chunk.name)) {
-                            interpret_function(then, vec![])?
-                        } else {
-                            return Err(Something);
-                        }
-                    });
                 }
                 OP_GOTO_IF => {
                     let b = self.pop();
@@ -281,6 +263,15 @@ impl Vm {
                     if b == Value::Bool(true) {
                         self.ip = goto_addr;
                     }
+                }
+                OP_GOTO => {
+                    let goto_addr = self.read(chunk);
+                    self.ip = goto_addr;
+                }
+                OP_DUP =>{
+                    let value = self.pop();
+                    self.push(value.clone());
+                    self.push(value);
                 }
                 _ => {}
             }
@@ -393,6 +384,8 @@ pub const OP_DEF_F64: u16 = 40;
 pub const OP_ASSIGN: u16 = 41;
 pub const OP_LIST_GET: u16 = 42;
 pub const OP_CALL_BUILTIN: u16 = 43;
-pub const OP_IF: u16 = 44;
-pub const OP_IF_ELSE: u16 = 45;
+pub const OP_DUP: u16 = 44;
+// pub const OP_IF_ELSE: u16 = 45;
 pub const OP_GOTO_IF: u16 = 46;
+pub const OP_GOTO_NIF: u16 = 48;
+pub const OP_GOTO: u16 = 47;

@@ -8,12 +8,7 @@ use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType;
 use crate::tokens::TokenType::Unknown;
 use crate::value::Value;
-use crate::vm::{
-    OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CALL_BUILTIN,
-    OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GOTO_IF, OP_GREATER,
-    OP_GREATER_EQUAL, OP_IF, OP_IF_ELSE, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY,
-    OP_NEGATE, OP_NOT, OP_OR, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
-};
+use crate::vm::{OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CALL_BUILTIN, OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_DUP, OP_EQUAL, OP_GET, OP_GOTO, OP_GOTO_IF, OP_GOTO_NIF, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT};
 use crate::{Registry, SymbolTable};
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -165,22 +160,28 @@ impl Compiler {
                 else_branch,
             } => {
                 self.compile_expression(namespace, condition, symbols, registry)?;
-                compile(
-                    Some(&format!("{}.?",namespace)),
-                    then_branch,
-                    symbols,
-                    registry,
-                )?;
-                if else_branch.is_none() {
-                    self.emit_byte(OP_IF);
-                } else {
-                    self.emit_byte(OP_IF_ELSE);
-                    compile(
-                        Some(format!("{}.:", namespace).as_str()),
+
+                self.emit_byte(OP_DUP);
+                self.emit_bytes(OP_GOTO_NIF, 0);
+                let goto_addr1 = self.chunk.code.len()-1;
+                self.emit_byte(OP_POP);
+                self.compile_statements(then_branch, symbols, registry, namespace)?;
+                self.emit_bytes(OP_GOTO, 0);
+                let goto_addr2 = self.chunk.code.len()-1;
+                if else_branch.is_some() {
+                    self.chunk.code[goto_addr1] = self.chunk.code.len() as u16;
+                    self.emit_bytes(OP_GOTO_IF, 0);
+                    let goto_addr3 = self.chunk.code.len() - 1;
+
+                    self.compile_statements(
                         else_branch.as_ref().unwrap(),
                         symbols,
                         registry,
+                        namespace,
                     )?;
+
+                    self.chunk.code[goto_addr2] = self.chunk.code.len() as u16; // fill in the placeholder
+                    self.chunk.code[goto_addr3] = self.chunk.code.len() as u16; // fill in the placeholder
                 }
             }
             Statement::ForStatement {
@@ -303,7 +304,11 @@ impl Compiler {
                     return Err(self.raise(UndeclaredVariable(name.to_string())));
                 }
             }
-            Expression::Assignment { variable_name, value, .. } => {
+            Expression::Assignment {
+                variable_name,
+                value,
+                ..
+            } => {
                 self.compile_expression(namespace, value, symbols, registry)?;
                 let name_index = self.vars.get(variable_name);
                 if let Some(name_index) = name_index {

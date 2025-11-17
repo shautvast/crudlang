@@ -211,3 +211,10 @@ fn add(a: string, b: string) -> string:
     a + " " + b
 ```
 * get() is the entry point for http GET method calls, likewise for POST, PUT, DELETE, etc.
+
+ISSUES
+* Make everything an expression. If is a statement and so it can not be type checked
+* improve indenting
+* add an extra pass that creates a more IR-like representation (enum instead of bytes)
+  * easier debugging
+  * chunk debug to stdout can be removed
