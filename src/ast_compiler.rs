@@ -1,12 +1,18 @@
 use crate::ast_compiler::Expression::{
-    FieldGet, FunctionCall, ListGet, MapGet, MethodCall, NamedParameter, Stop, Variable,
+    Assignment, FieldGet, FunctionCall, ListGet, MapGet, MethodCall, NamedParameter, Stop, Variable,
 };
 use crate::errors::CompilerError::{
     self, Expected, ParseError, TooManyParameters, UnexpectedIndent, UninitializedVariable,
 };
 use crate::errors::CompilerErrorAtLine;
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
-use crate::tokens::TokenType::{Bang, Bool, Char, Colon, DateTime, Dot, Eof, Eol, Equal, False, FloatingPoint, Fn, Greater, GreaterEqual, GreaterGreater, Identifier, If, Indent, Integer, LeftBrace, LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus, Print, RightBrace, RightBracket, RightParen, SingleRightArrow, Slash, Star, StringType, True, U32, U64, Unknown, Else};
+use crate::tokens::TokenType::{
+    Bang, Bool, Char, Colon, DateTime, Dot, Else, Eof, Eol, Equal, False, FloatingPoint, Fn, For,
+    Greater, GreaterEqual, GreaterGreater, Identifier, If, In, Indent, Integer, LeftBrace,
+    LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus,
+    Print, Range, RightBrace, RightBracket, RightParen, SingleRightArrow, Slash, Star, StringType,
+    True, U32, U64, Unknown,
+};
 use crate::tokens::{Token, TokenType};
 use crate::value::Value;
 use crate::{Expr, Stmt, SymbolTable};
@@ -66,6 +72,9 @@ impl AstCompiler {
         if !self.had_error {
             let mut statements = vec![];
             while !self.is_at_end() {
+                if self.match_token(&[Eol]) {
+                    continue;
+                }
                 let statement = self.indent(symbol_table)?;
                 if let Some(statement) = statement {
                     statements.push(statement);
@@ -316,9 +325,27 @@ impl AstCompiler {
             self.print_statement(symbol_table)
         } else if self.match_token(&[If]) {
             self.if_statement(symbol_table)
+        } else if self.match_token(&[For]) {
+            self.for_statement(symbol_table)
         } else {
             self.expr_statement(symbol_table)
         }
+    }
+
+    fn for_statement(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
+        let loop_var = self.consume(&Identifier, Expected("loop variable name."))?;
+        self.consume(&In, Expected("'in' after loop variable name."))?;
+        let range = self.expression(symbol_table)?;
+        self.consume(&Colon, Expected("colon after range expression"))?;
+        self.consume(&Eol, Expected("end of line after for expression."))?;
+        self.inc_indent();
+        let body = self.compile(symbol_table)?;
+
+        Ok(Statement::ForStatement {
+            loop_var,
+            range,
+            body,
+        })
     }
 
     fn if_statement(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
@@ -337,7 +364,11 @@ impl AstCompiler {
         } else {
             None
         };
-        Ok(Statement::IfStatement {condition, then_branch, else_branch})
+        Ok(Statement::IfStatement {
+            condition,
+            then_branch,
+            else_branch,
+        })
     }
 
     fn inc_indent(&mut self) {
@@ -389,7 +420,21 @@ impl AstCompiler {
 
     fn assignment(&mut self, symbol_table: &mut SymbolTable) -> Expr {
         let expr = self.equality(symbol_table)?;
-        self.binary(&[TokenType::Equal], expr, symbol_table)
+        if self.match_token(&[Equal]) {
+            let operator = self.previous().clone();
+            let right = self.comparison(symbol_table)?;
+            if let Variable { name, .. } = expr {
+                Ok(Assignment {
+                    line: operator.line,
+                    variable_name: name.to_string(),
+                    value: Box::new(right),
+                })
+            } else {
+                Err(self.raise(CompilerError::Failure))
+            }
+        } else {
+            Ok(expr)
+        }
     }
 
     fn equality(&mut self, symbol_table: &mut SymbolTable) -> Expr {
@@ -402,12 +447,26 @@ impl AstCompiler {
     }
 
     fn comparison(&mut self, symbol_table: &mut SymbolTable) -> Expr {
-        let expr = self.bitshift(symbol_table)?;
+        let expr = self.range(symbol_table)?;
         self.binary(
             &[Greater, GreaterEqual, Less, LessEqual],
             expr,
             symbol_table,
         )
+    }
+
+    fn range(&mut self, symbol_table: &mut SymbolTable) -> Expr {
+        let mut expr = self.bitshift(symbol_table)?;
+        if self.match_token(&[Range]) {
+            let operator = self.previous().clone();
+            let right = self.expression(symbol_table)?;
+            expr = Expression::Range {
+                line: operator.line,
+                lower: Box::new(expr),
+                upper: Box::new(right),
+            };
+        }
+        Ok(expr)
     }
 
     fn bitshift(&mut self, symbol_table: &mut SymbolTable) -> Expr {
@@ -805,11 +864,16 @@ pub enum Statement {
         if_expr: Expression,
         then_expr: Expression,
     },
-    IfStatement{
+    IfStatement {
         condition: Expression,
         then_branch: Vec<Statement>,
-        else_branch: Option<Vec<Statement>>
-    }
+        else_branch: Option<Vec<Statement>>,
+    },
+    ForStatement {
+        loop_var: Token,
+        range: Expression,
+        body: Vec<Statement>,
+    },
 }
 
 impl Statement {
@@ -822,6 +886,7 @@ impl Statement {
             Statement::ObjectStmt { name, .. } => name.line,
             Statement::GuardStatement { if_expr, .. } => if_expr.line(),
             Statement::IfStatement { condition, .. } => condition.line(),
+            Statement::ForStatement { loop_var, .. } => loop_var.line,
         }
     }
 }
@@ -867,6 +932,11 @@ pub enum Expression {
         literaltype: TokenType,
         value: Value,
     },
+    Range {
+        line: usize,
+        lower: Box<Expression>,
+        upper: Box<Expression>,
+    },
     List {
         line: usize,
         literaltype: TokenType,
@@ -881,6 +951,11 @@ pub enum Expression {
         line: usize,
         name: String,
         var_type: TokenType,
+    },
+    Assignment {
+        line: usize,
+        variable_name: String,
+        value: Box<Expression>,
     },
     FunctionCall {
         line: usize,
@@ -922,9 +997,11 @@ impl Expression {
             Self::Unary { line, .. } => *line,
             Self::Grouping { line, .. } => *line,
             Self::Literal { line, .. } => *line,
+            Self::Range { line, .. } => *line,
             Self::List { line, .. } => *line,
             Self::Map { line, .. } => *line,
             Variable { line, .. } => *line,
+            Assignment { line, .. } => *line,
             FunctionCall { line, .. } => *line,
             MethodCall { line, .. } => *line,
             Stop { line } => *line,

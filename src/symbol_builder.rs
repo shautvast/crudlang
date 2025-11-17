@@ -1,5 +1,5 @@
 use crate::ast_compiler::{Expression, Parameter, Statement};
-use crate::builtins::{Signature, lookup};
+use crate::builtins::lookup;
 use crate::errors::CompilerError;
 use crate::errors::CompilerError::IncompatibleTypes;
 use crate::tokens::TokenType::{
@@ -186,6 +186,7 @@ pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> Token
             }
         }
         Expression::Variable { var_type, .. } => var_type.clone(),
+        Expression::Assignment { value, .. } => infer_type(value, symbols),
         Expression::FunctionCall { name, .. } => {
             let symbol = symbols.get(name);
             match symbol {
@@ -203,7 +204,7 @@ pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> Token
                 if let Ok(signature) = lookup(&value.to_string(), method_name) {
                     signature.return_type.clone()
                 } else {
-                    unreachable!()//?
+                    unreachable!() //?
                 }
             } else {
                 infer_type(receiver, symbols)
@@ -215,5 +216,6 @@ pub fn infer_type(expr: &Expression, symbols: &HashMap<String, Symbol>) -> Token
         Expression::ListGet { .. } => TokenType::Unknown,
         Expression::MapGet { .. } => TokenType::Unknown,
         Expression::FieldGet { .. } => TokenType::Unknown,
+        Expression::Range { lower, .. } => infer_type(lower, symbols),
     }
 }

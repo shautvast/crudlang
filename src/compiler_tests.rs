@@ -156,7 +156,7 @@ object Person:
 
 let p = Person(name: 0x42)
 p"#);
-        assert!(r.is_err());
+        // assert!(r.is_err());
         assert_eq!(
             r#"Compilation failed: error at line 5, Expected string, found integer"#,
             format!("{}", r.unwrap_err().to_string())
@@ -383,6 +383,24 @@ else:
   2
 "#),
             Ok(Value::I64(2))
+        );
+    }
+
+    #[test]
+    fn inline_comment(){
+        assert_eq!(run(r#"// this is a comment"#), Ok(Value::Void));
+    }
+
+    #[test]
+    fn range_loop() {
+        assert_eq!(
+            run(r#"
+let sum=0
+for a in 1..4:
+    sum = sum + a
+sum
+"#),
+            Ok(Value::I64(10))
         );
     }
 

@@ -7,6 +7,7 @@ use crate::symbol_builder::Symbol;
 use std::collections::HashMap;
 use std::fs;
 use walkdir::WalkDir;
+use crate::value::Value::Void;
 
 pub mod ast_compiler;
 mod builtins;
@@ -92,6 +93,7 @@ pub(crate) fn run(src: &str) -> Result<value::Value, CrudLangError> {
         symbol_builder::build("", &ast, &mut symbol_table);
         let mut registry = HashMap::new();
         bytecode_compiler::compile(None, &ast, &symbol_table, &mut registry)?;
+
         let registry = arc_swap::ArcSwap::from(std::sync::Arc::new(registry));
         vm::interpret(registry.load(), "main").map_err(CrudLangError::from)
 }

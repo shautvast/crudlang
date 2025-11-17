@@ -7,10 +7,10 @@ use crate::errors::{CompilerError, CompilerErrorAtLine};
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::tokens::TokenType;
 use crate::tokens::TokenType::Unknown;
-use crate::value::{Value};
+use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CALL_BUILTIN,
-    OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER,
+    OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_EQUAL, OP_GET, OP_GOTO_IF, OP_GREATER,
     OP_GREATER_EQUAL, OP_IF, OP_IF_ELSE, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY,
     OP_NEGATE, OP_NOT, OP_OR, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
 };
@@ -76,6 +76,7 @@ impl Compiler {
         }
     }
 
+    /// compile the entire AST into a chunk, adding a RETURN OP
     pub(crate) fn compile(
         &mut self,
         ast: &Vec<Statement>,
@@ -83,20 +84,28 @@ impl Compiler {
         registry: &mut Registry,
         namespace: &str,
     ) -> Result<Chunk, CompilerErrorAtLine> {
-        for statement in ast {
-            self.compile_statement(statement, symbols, registry, namespace)?;
-        }
-
+        self.compile_statements(ast, symbols, registry, namespace)?;
         self.emit_byte(OP_RETURN);
         let chunk = self.chunk.clone();
         self.chunk.code.clear(); // in case the compiler is reused, clear it for the next compilation. This is for the REPL
         Ok(chunk)
     }
 
-    fn raise(&self, error: CompilerError) -> CompilerErrorAtLine {
-        CompilerErrorAtLine::raise(error, self.current_line)
+    /// compile the entire AST into a chunk
+    fn compile_statements(
+        &mut self,
+        ast: &Vec<Statement>,
+        symbols: &SymbolTable,
+        registry: &mut Registry,
+        namespace: &str,
+    ) -> Result<(), CompilerErrorAtLine> {
+        for statement in ast {
+            self.compile_statement(statement, symbols, registry, namespace)?;
+        }
+        Ok(())
     }
 
+    /// compile a single statement
     fn compile_statement(
         &mut self,
         statement: &Statement,
@@ -173,6 +182,38 @@ impl Compiler {
                         registry,
                     )?;
                 }
+            }
+            Statement::ForStatement {
+                loop_var,
+                range,
+                body,
+            } => {
+                // 1. step var index
+                let step_const_index = self.emit_constant(Value::I64(1));
+                // 2. range expression
+                self.compile_expression(namespace, range, symbols, registry)?;
+                //save the constants for lower and upper bounds of the range
+                let start_index = self.chunk.constants.len() - 1;
+                let end_index = self.chunk.constants.len() - 2;
+
+                let name = loop_var.lexeme.as_str();
+                let loop_var_name_index = self.chunk.add_var(&loop_var.token_type, name);
+                self.vars.insert(name.to_string(), loop_var_name_index);
+
+                // 3. start index
+                self.emit_bytes(OP_CONSTANT, start_index as u16);
+                self.emit_bytes(OP_ASSIGN, loop_var_name_index as u16);
+
+                let return_addr = self.chunk.code.len();
+                self.compile_statements(body, symbols, registry, namespace)?;
+                self.emit_bytes(OP_GET, loop_var_name_index as u16);
+                self.emit_bytes(OP_CONSTANT, step_const_index);
+                self.emit_byte(OP_ADD);
+                self.emit_bytes(OP_ASSIGN, loop_var_name_index as u16);
+                self.emit_bytes(OP_CONSTANT, end_index as u16);
+                self.emit_bytes(OP_GET, loop_var_name_index as u16);
+                self.emit_byte(OP_GREATER_EQUAL);
+                self.emit_bytes(OP_GOTO_IF, return_addr as u16);
             }
         }
         Ok(())
@@ -262,6 +303,15 @@ impl Compiler {
                     return Err(self.raise(UndeclaredVariable(name.to_string())));
                 }
             }
+            Expression::Assignment { variable_name, value, .. } => {
+                self.compile_expression(namespace, value, symbols, registry)?;
+                let name_index = self.vars.get(variable_name);
+                if let Some(name_index) = name_index {
+                    self.emit_bytes(OP_ASSIGN, *name_index as u16);
+                } else {
+                    return Err(self.raise(UndeclaredVariable(variable_name.to_string())));
+                }
+            }
             Expression::Literal { value, .. } => {
                 self.emit_constant(value.clone());
             }
@@ -343,6 +393,11 @@ impl Compiler {
             }
             Expression::MapGet { .. } => {}
             Expression::FieldGet { .. } => {}
+            Expression::Range { lower, upper, .. } => {
+                // opposite order, because we have to assign last one first to the loop variable
+                self.compile_expression(namespace, upper, symbols, registry)?;
+                self.compile_expression(namespace, lower, symbols, registry)?;
+            }
         }
         Ok(())
     }
@@ -392,5 +447,9 @@ impl Compiler {
         let index = self.chunk.add_constant(value) as u16;
         self.emit_bytes(OP_CONSTANT, index);
         index
+    }
+
+    fn raise(&self, error: CompilerError) -> CompilerErrorAtLine {
+        CompilerErrorAtLine::raise(error, self.current_line)
     }
 }

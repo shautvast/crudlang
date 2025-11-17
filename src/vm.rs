@@ -1,3 +1,4 @@
+use crate::Registry;
 use crate::chunk::Chunk;
 use crate::errors::RuntimeError::Something;
 use crate::errors::{RuntimeError, ValueError};
@@ -7,7 +8,6 @@ use arc_swap::Guard;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
-use crate::Registry;
 
 pub struct Vm {
     ip: usize,
@@ -17,14 +17,15 @@ pub struct Vm {
     pub(crate) registry: Arc<HashMap<String, Chunk>>,
 }
 
-
 pub fn interpret(
     registry: Guard<Arc<HashMap<String, Chunk>>>,
     function: &str,
 ) -> Result<Value, RuntimeError> {
     let chunk = registry.get(function).unwrap().clone();
+    // chunk.disassemble();
     let mut vm = Vm::new(&registry);
     vm.run(&get_context(function), &chunk)
+    // Ok(Value::Void)
 }
 
 pub async fn interpret_async(
@@ -57,7 +58,7 @@ fn value_map(strings: HashMap<String, String>) -> HashMap<Value, Value> {
 }
 
 pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
-    let mut vm = Vm::new(& Arc::new(HashMap::new()));
+    let mut vm = Vm::new(&Arc::new(HashMap::new()));
     vm.run_function(chunk, args)
 }
 
@@ -157,7 +158,7 @@ impl Vm {
                     let (var_type, name) = chunk.vars.get(index).unwrap();
                     let value = self.pop();
                     let value = Self::number(var_type, value)?;
-                    self.local_vars.insert(name.to_string(), value);
+                    self.local_vars.insert(name.to_string(), value); //insert or update
                 }
                 OP_DEF_MAP => {
                     let len = self.read(chunk);
@@ -172,7 +173,7 @@ impl Vm {
                 OP_GET => {
                     let var_index = self.read(chunk);
                     let (_, name_index) = chunk.vars.get(var_index).unwrap();
-                    let value = self.local_vars.remove(name_index).unwrap();
+                    let value = self.local_vars.get(name_index).unwrap().clone();
                     self.push(value);
                 }
                 OP_LIST_GET => {
@@ -196,10 +197,11 @@ impl Vm {
                     }
                     args.reverse();
                     let receiver = self.pop();
-                    let return_value = crate::builtins::call(&receiver_type_name, &function_name, receiver, args)?;
+                    let return_value =
+                        crate::builtins::call(&receiver_type_name, &function_name, receiver, args)?;
                     self.push(return_value);
                 }
-                OP_POP =>{
+                OP_POP => {
                     self.pop(); // discards the value
                 }
                 OP_CALL => {
@@ -232,12 +234,9 @@ impl Vm {
                             }
 
                             let mut fields = vec![];
-                            params
-                                .iter()
-                                .zip(args)
-                                .for_each(|(param, arg)| {
-                                    fields.push((param.name.lexeme.clone(), arg))
-                                });
+                            params.iter().zip(args).for_each(|(param, arg)| {
+                                fields.push((param.name.lexeme.clone(), arg))
+                            });
                             let new_instance = Value::ObjectType(Box::new(Object {
                                 definition: function_name,
                                 fields,
@@ -254,7 +253,7 @@ impl Vm {
                 OP_IF => {
                     let condition = self.pop();
                     if condition == Value::Bool(true) {
-                        if let Some(then) = self.registry.get(&format!("{}.?",chunk.name)){
+                        if let Some(then) = self.registry.get(&format!("{}.?", chunk.name)) {
                             let result = interpret_function(then, vec![])?;
                             self.push(result);
                         }
@@ -263,18 +262,25 @@ impl Vm {
                 OP_IF_ELSE => {
                     let condition = self.pop();
                     self.push(if condition == Value::Bool(true) {
-                        if let Some(then) = self.registry.get(&format!("{}.?",chunk.name)){
+                        if let Some(then) = self.registry.get(&format!("{}.?", chunk.name)) {
                             interpret_function(then, vec![])?
                         } else {
                             return Err(Something);
                         }
                     } else {
-                        if let Some(then) = self.registry.get(&format!("{}.:",chunk.name)){
+                        if let Some(then) = self.registry.get(&format!("{}.:", chunk.name)) {
                             interpret_function(then, vec![])?
                         } else {
                             return Err(Something);
                         }
                     });
+                }
+                OP_GOTO_IF => {
+                    let b = self.pop();
+                    let goto_addr = self.read(chunk);
+                    if b == Value::Bool(true) {
+                        self.ip = goto_addr;
+                    }
                 }
                 _ => {}
             }
@@ -389,3 +395,4 @@ pub const OP_LIST_GET: u16 = 42;
 pub const OP_CALL_BUILTIN: u16 = 43;
 pub const OP_IF: u16 = 44;
 pub const OP_IF_ELSE: u16 = 45;
+pub const OP_GOTO_IF: u16 = 46;

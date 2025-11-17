@@ -142,7 +142,7 @@ impl Scanner {
                     if c == '0' && self.peek() == 'x' {
                         self.hex_number()?;
                     } else if c.is_ascii_digit() {
-                        self.number();
+                        self.number_or_range();
                     } else if is_alpha(c) {
                         self.identifier();
                     } else {
@@ -181,7 +181,7 @@ impl Scanner {
         Ok(())
     }
 
-    fn number(&mut self) {
+    fn number_or_range(&mut self) {
         while self.peek().is_ascii_digit() {
             self.advance();
         }
@@ -190,12 +190,29 @@ impl Scanner {
             has_dot = true;
             self.advance();
         }
+        if self.peek() == '.' && self.peek_next() == '.' {
+            self.range_expression()
+        } else {
+            while is_digit_or_scientific(self.peek()) {
+                self.advance();
+            }
+            let value: String = self.chars[self.start..self.current].iter().collect();
+            self.add_token_with_value(if has_dot { FloatingPoint } else { Integer }, value);
+        }
+    }
 
-        while is_digit_or_scientific(self.peek()) {
+    fn range_expression(&mut self) {
+        let lower: String = self.chars[self.start..self.current].iter().collect();
+        self.match_next('.');
+        self.match_next('.');
+        self.add_token_with_value(Integer, lower);
+        self.add_token(TokenType::Range);
+        self.start = self.current;
+        while self.peek().is_ascii_digit() {
             self.advance();
         }
-        let value: String = self.chars[self.start..self.current].iter().collect();
-        self.add_token_with_value(if has_dot { FloatingPoint } else { Integer }, value);
+        let upper: String = self.chars[self.start..self.current].iter().collect();
+        self.add_token_with_value(Integer, upper);
     }
 
     fn char(&mut self) -> Result<(), CompilerErrorAtLine> {
@@ -265,11 +282,15 @@ impl Scanner {
     }
 
     fn peek_next(&self) -> char {
-        self.chars[self.current + 1]
+        if self.current + 1 >= self.chars.len() {
+            '\0'
+        } else {
+            self.chars[self.current + 1]
+        }
     }
 
     fn match_next(&mut self, expected: char) -> bool {
-        if self.is_at_end() || self.chars[self.current] != expected{
+        if self.is_at_end() || self.chars[self.current] != expected {
             false
         } else {
             self.current += 1;
@@ -304,13 +325,12 @@ struct Scanner {
     new_line: bool,
 }
 
-
 fn is_digit_or_scientific(c: char) -> bool {
     c.is_ascii_digit() || c == 'e' || c == 'E'
 }
 
 fn is_alphanumeric(c: char) -> bool {
-    is_alpha(c) ||  c.is_ascii_digit()
+    is_alpha(c) || c.is_ascii_digit()
 }
 
 fn is_alpha(c: char) -> bool {

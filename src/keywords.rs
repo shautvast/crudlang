@@ -13,6 +13,7 @@ pub(crate) fn get_keyword(lexeme: &str) -> Option<TokenType> {
         "fn" => Some(TokenType::Fn),
         "for" => Some(TokenType::For),
         "if" => Some(TokenType::If),
+        "in" => Some(TokenType::In),
         "i32" => Some(TokenType::I32),
         "i64" => Some(TokenType::I64),
         "let" => Some(TokenType::Let),

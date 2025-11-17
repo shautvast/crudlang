@@ -5,7 +5,7 @@ use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_F32,
     OP_DEF_F64, OP_DEF_I32, OP_DEF_I64, OP_DEF_LIST, OP_DEF_MAP, OP_DEF_STRING, OP_DEFINE,
     OP_DIVIDE, OP_EQUAL, OP_GET, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_MULTIPLY,
-    OP_NEGATE, OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,
+    OP_NEGATE, OP_NOT, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT,OP_ASSIGN,OP_GOTO_IF
 };
 use std::collections::HashMap;
 
@@ -117,9 +117,11 @@ impl Chunk {
             OP_DEF_F64 => self.constant_inst("DEFF64", offset),
             OP_DEF_BOOL => self.constant_inst("DEFBOOL", offset),
             OP_CALL => self.call_inst("CALL", offset),
-            OP_GET => self.constant_inst("GET", offset),
+            OP_GET => self.assign_inst("GET", offset),
             OP_DEF_LIST => self.new_inst("DEFLIST", offset),
             OP_DEF_MAP => self.new_inst("DEFMAP", offset),
+            OP_ASSIGN => self.assign_inst("ASSIGN", offset),
+            OP_GOTO_IF => self.constant_inst("GOTO_IF", offset),
             _ => {
                 println!("Unknown instruction {}", instruction);
                 offset + 1
@@ -130,6 +132,13 @@ impl Chunk {
     fn simple_inst(&self, op: &str, offset: usize) -> usize {
         println!("{}", op);
         offset + 1
+    }
+
+    fn assign_inst(&self, op: &str, offset: usize) -> usize {
+        let constant = self.code[offset + 1];
+        print!("{} {}:", op, constant);
+        println!("{}",self.vars.get(constant as usize).unwrap().1);
+        offset + 2
     }
 
     fn call_inst(&self, op: &str, offset: usize) -> usize {

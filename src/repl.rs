@@ -2,7 +2,7 @@ use crate::chunk::Chunk;
 use crate::errors::CrudLangError;
 use crate::scanner::scan;
 use crate::vm::Vm;
-use crate::{ast_compiler, bytecode_compiler, map_underlying, recompile, symbol_builder};
+use crate::{ast_compiler, bytecode_compiler, map_underlying, symbol_builder};
 use arc_swap::ArcSwap;
 use std::collections::HashMap;
 use std::io;
