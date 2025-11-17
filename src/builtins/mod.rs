@@ -7,7 +7,7 @@ use crate::tokens::TokenType;
 use crate::value::Value;
 use std::collections::HashMap;
 use std::sync::LazyLock;
-use crate::ast_compiler::Parameter;
+use crate::ast_pass::Parameter;
 use crate::builtins::list::list_functions;
 
 pub(crate) struct Signature {

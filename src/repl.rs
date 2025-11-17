@@ -1,8 +1,8 @@
 use crate::chunk::Chunk;
 use crate::errors::CrudLangError;
-use crate::scanner::scan;
+use crate::scan_pass::scan;
 use crate::vm::Vm;
-use crate::{ast_compiler, bytecode_compiler, map_underlying, symbol_builder};
+use crate::{ast_pass, bytecode_pass, map_underlying, symbol_builder};
 use arc_swap::ArcSwap;
 use std::collections::HashMap;
 use std::io;
@@ -15,7 +15,7 @@ pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudL
     println!(":h for help");
     let mut symbol_table = HashMap::new();
     let mut vm = Vm::new(&registry.load());
-    let mut bytecode_compiler = bytecode_compiler::Compiler::new("main");
+    let mut bytecode_compiler = bytecode_pass::Compiler::new("main");
     loop {
         print!(">");
         io::stdout().flush().map_err(map_underlying())?;
@@ -34,7 +34,7 @@ pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudL
 
                 let tokens = scan(input)?;
 
-                let ast = match ast_compiler::compile(None, tokens, &mut symbol_table){
+                let ast = match ast_pass::compile(None, tokens, &mut symbol_table){
                     Ok(ast) => ast,
                     Err(e) => {
                         println!("{}", e);

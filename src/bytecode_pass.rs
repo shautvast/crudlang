@@ -1,5 +1,5 @@
-use crate::ast_compiler::Expression::NamedParameter;
-use crate::ast_compiler::{Expression, Function, Parameter, Statement};
+use crate::ast_pass::Expression::NamedParameter;
+use crate::ast_pass::{Expression, Function, Parameter, Statement};
 use crate::builtins::lookup;
 use crate::chunk::Chunk;
 use crate::errors::CompilerError::{IncompatibleTypes, UndeclaredVariable};

@@ -1,24 +1,24 @@
-use crate::ast_compiler::{Expression, Statement};
+use crate::ast_pass::{Expression, Statement};
 use crate::chunk::Chunk;
 use crate::errors::CrudLangError::Platform;
 use crate::errors::{CompilerErrorAtLine, CrudLangError};
-use crate::scanner::scan;
+use crate::scan_pass::scan;
 use crate::symbol_builder::Symbol;
 use std::collections::HashMap;
 use std::fs;
 use walkdir::WalkDir;
 use crate::value::Value::Void;
 
-pub mod ast_compiler;
+pub mod ast_pass;
 mod builtins;
-pub mod bytecode_compiler;
+pub mod bytecode_pass;
 pub mod chunk;
 mod compiler_tests;
 pub mod errors;
 pub mod file_watch;
 mod keywords;
 pub mod repl;
-pub mod scanner;
+pub mod scan_pass;
 mod symbol_builder;
 mod tokens;
 mod value;
@@ -39,12 +39,12 @@ pub fn compile_sourcedir(source_dir: &str) -> Result<HashMap<String, Chunk>, Cru
             let source = fs::read_to_string(path).map_err(map_underlying())?;
             let tokens = scan(&source)?;
             let mut symbol_table = HashMap::new();
-            match ast_compiler::compile(Some(path), tokens, &mut symbol_table) {
+            match ast_pass::compile(Some(path), tokens, &mut symbol_table) {
                 Ok(statements) => {
                     let path = path.strip_prefix(source_dir).unwrap().replace(".crud", "");
 
                     symbol_builder::build(&path, &statements, &mut symbol_table);
-                    bytecode_compiler::compile(
+                    bytecode_pass::compile(
                         Some(&path),
                         &statements,
                         &symbol_table,
@@ -69,9 +69,9 @@ pub fn map_underlying() -> fn(std::io::Error) -> CrudLangError {
 pub fn recompile(src: &str, registry: &mut HashMap<String, Chunk>) -> Result<(), CrudLangError> {
     let tokens = scan(src)?;
     let mut symbol_table = HashMap::new();
-    let ast = ast_compiler::compile(None, tokens, &mut symbol_table)?;
+    let ast = ast_pass::compile(None, tokens, &mut symbol_table)?;
     symbol_builder::build("", &ast, &mut symbol_table);
-    bytecode_compiler::compile(None, &ast, &symbol_table, registry)?;
+    bytecode_pass::compile(None, &ast, &symbol_table, registry)?;
     Ok(())
 }
 
@@ -79,9 +79,9 @@ pub fn compile(src: &str) -> Result<HashMap<String, Chunk>, CrudLangError> {
     let tokens = scan(src)?;
     let mut registry = HashMap::new();
     let mut symbol_table = HashMap::new();
-    let ast = ast_compiler::compile(None, tokens, &mut symbol_table)?;
+    let ast = ast_pass::compile(None, tokens, &mut symbol_table)?;
     symbol_builder::build("", &ast, &mut symbol_table);
-    bytecode_compiler::compile(None, &ast, &symbol_table, &mut registry)?;
+    bytecode_pass::compile(None, &ast, &symbol_table, &mut registry)?;
     Ok(registry)
 }
 
@@ -89,10 +89,10 @@ pub fn compile(src: &str) -> Result<HashMap<String, Chunk>, CrudLangError> {
 pub(crate) fn run(src: &str) -> Result<value::Value, CrudLangError> {
         let tokens = scan(src)?;
         let mut symbol_table = HashMap::new();
-        let ast = ast_compiler::compile(None, tokens, &mut symbol_table)?;
+        let ast = ast_pass::compile(None, tokens, &mut symbol_table)?;
         symbol_builder::build("", &ast, &mut symbol_table);
         let mut registry = HashMap::new();
-        bytecode_compiler::compile(None, &ast, &symbol_table, &mut registry)?;
+        bytecode_pass::compile(None, &ast, &symbol_table, &mut registry)?;
 
         let registry = arc_swap::ArcSwap::from(std::sync::Arc::new(registry));
         vm::interpret(registry.load(), "main").map_err(CrudLangError::from)
