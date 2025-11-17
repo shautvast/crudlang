@@ -342,8 +342,12 @@ a=2"#),
     fn simple_if_expr() {
         assert_eq!(
             run(r#"
+let a = 2
+let b = 3
 if true:
-  2
+  a
+else:
+  b
 "#),
             Ok(Value::I64(2))
         );
