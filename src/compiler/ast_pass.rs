@@ -6,14 +6,14 @@ use crate::errors::CompilerError::{
 };
 use crate::errors::CompilerErrorAtLine;
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
-use crate::tokens::TokenType::{
+use crate::compiler::tokens::TokenType::{
     Bang, Bool, Char, Colon, DateTime, Dot, Else, Eof, Eol, Equal, False, FloatingPoint, Fn, For,
     Greater, GreaterEqual, GreaterGreater, Identifier, If, In, Indent, Integer, LeftBrace,
     LeftBracket, LeftParen, Less, LessEqual, LessLess, Let, ListType, MapType, Minus, Object, Plus,
     Print, Range, RightBrace, RightBracket, RightParen, SingleRightArrow, Slash, Star, StringType,
     True, U32, U64, Unknown,
 };
-use crate::tokens::{Token, TokenType};
+use crate::compiler::tokens::{Token, TokenType};
 use crate::value::Value;
 use crate::{Expr, Stmt, SymbolTable};
 use log::debug;

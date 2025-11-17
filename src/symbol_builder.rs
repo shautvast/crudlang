@@ -2,12 +2,12 @@ use crate::compiler::ast_pass::{Expression, Parameter, Statement};
 use crate::builtins::lookup;
 use crate::errors::CompilerError;
 use crate::errors::CompilerError::IncompatibleTypes;
-use crate::tokens::TokenType::{
+use crate::compiler::tokens::TokenType::{
     Bool, DateTime, F32, F64, FloatingPoint, Greater, GreaterEqual, I32, I64, Integer, Less,
     LessEqual, ListType, MapType, Minus, ObjectType, Plus, SignedInteger, StringType, U32, U64,
     Unknown, UnsignedInteger,
 };
-use crate::tokens::{Token, TokenType};
+use crate::compiler::tokens::{Token, TokenType};
 use log::debug;
 use std::collections::HashMap;
 use std::ops::Deref;

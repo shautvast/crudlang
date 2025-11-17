@@ -1,5 +1,5 @@
 use crate::compiler::ast_pass::Parameter;
-use crate::tokens::TokenType;
+use crate::compiler::tokens::TokenType;
 use crate::value::Value;
 use crate::vm::{
     OP_ADD, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CONSTANT, OP_DEF_BOOL, OP_DEF_F32,

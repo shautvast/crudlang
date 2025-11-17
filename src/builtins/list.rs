@@ -1,8 +1,8 @@
 use crate::compiler::ast_pass::Parameter;
 use crate::builtins::{FunctionMap, Signature, add, expected};
 use crate::errors::RuntimeError;
-use crate::tokens::TokenType;
-use crate::tokens::TokenType::U64;
+use crate::compiler::tokens::TokenType;
+use crate::compiler::tokens::TokenType::U64;
 use crate::value::{Value, u64};
 use std::collections::HashMap;
 

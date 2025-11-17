@@ -1,4 +1,4 @@
-use crate::tokens::TokenType;
+use crate::compiler::tokens::TokenType;
 use std::fmt::Display;
 use thiserror::Error;
 

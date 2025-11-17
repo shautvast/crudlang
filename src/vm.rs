@@ -2,7 +2,7 @@ use crate::Registry;
 use crate::chunk::Chunk;
 use crate::errors::RuntimeError::Something;
 use crate::errors::{RuntimeError, ValueError};
-use crate::tokens::TokenType;
+use crate::compiler::tokens::TokenType;
 use crate::value::{Object, Value};
 use arc_swap::Guard;
 use std::collections::HashMap;

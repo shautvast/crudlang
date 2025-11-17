@@ -5,8 +5,8 @@ use crate::chunk::Chunk;
 use crate::errors::CompilerError::{IncompatibleTypes, UndeclaredVariable};
 use crate::errors::{CompilerError, CompilerErrorAtLine};
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
-use crate::tokens::TokenType;
-use crate::tokens::TokenType::Unknown;
+use crate::compiler::tokens::TokenType;
+use crate::compiler::tokens::TokenType::Unknown;
 use crate::value::Value;
 use crate::vm::{OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CALL_BUILTIN, OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_DUP, OP_EQUAL, OP_GET, OP_GOTO, OP_GOTO_IF, OP_GOTO_NIF, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT};
 use crate::{Registry, SymbolTable};
@@ -182,6 +182,8 @@ impl Compiler {
 
                     self.chunk.code[goto_addr2] = self.chunk.code.len() as u16; // fill in the placeholder
                     self.chunk.code[goto_addr3] = self.chunk.code.len() as u16; // fill in the placeholder
+                } else {
+                    self.chunk.code[goto_addr1] = self.chunk.code.len() as u16;
                 }
             }
             Statement::ForStatement {

@@ -3,7 +3,7 @@ mod list;
 
 use crate::builtins::string::string_functions;
 use crate::errors::{CompilerError, RuntimeError};
-use crate::tokens::TokenType;
+use crate::compiler::tokens::TokenType;
 use crate::value::Value;
 use std::collections::HashMap;
 use std::sync::LazyLock;

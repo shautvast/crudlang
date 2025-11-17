@@ -1,4 +1,4 @@
-use crate::tokens::TokenType;
+use crate::compiler::tokens::TokenType;
 
 pub(crate) fn get_keyword(lexeme: &str) -> Option<TokenType> {
     match lexeme {

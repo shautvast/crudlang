@@ -1,12 +1,10 @@
 use crate::errors::CompilerError::{IllegalCharLength, UnexpectedIdentifier, Unterminated};
 use crate::errors::{CompilerError, CompilerErrorAtLine};
-use crate::tokens::TokenType::{BitXor, FloatingPoint, Integer, Question, U32, U64};
-use crate::{
-    keywords,
-    tokens::{
-        Token,
-        TokenType::{self},
-    },
+use crate::compiler::tokens::TokenType::{BitXor, FloatingPoint, Integer, Question, U32, U64};
+use crate::keywords;
+use crate::compiler::tokens::{
+    Token,
+    TokenType::{self},
 };
 
 pub fn scan(source: &str) -> Result<Vec<Token>, CompilerErrorAtLine> {

@@ -3,7 +3,6 @@ use crate::compiler::ast_pass::{Expression, Statement};
 use crate::errors::CrudLangError::Platform;
 use crate::errors::{CompilerErrorAtLine, CrudLangError};
 use crate::symbol_builder::Symbol;
-use crate::value::Value::Void;
 use std::collections::HashMap;
 use std::fs;
 use walkdir::WalkDir;
@@ -16,7 +15,6 @@ pub mod file_watch;
 mod keywords;
 pub mod repl;
 mod symbol_builder;
-mod tokens;
 mod value;
 pub mod vm;
 
