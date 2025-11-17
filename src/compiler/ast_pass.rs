@@ -1,4 +1,4 @@
-use crate::ast_pass::Expression::{
+use crate::compiler::ast_pass::Expression::{
     Assignment, FieldGet, FunctionCall, ListGet, MapGet, MethodCall, NamedParameter, Stop, Variable,
 };
 use crate::errors::CompilerError::{
@@ -30,10 +30,10 @@ pub fn compile(
 
 #[derive(Debug, Clone)]
 pub struct Function {
-    pub(crate) name: Token,
-    pub(crate) parameters: Vec<Parameter>,
-    pub(crate) return_type: TokenType,
-    pub(crate) body: Vec<Statement>,
+    pub name: Token,
+    pub parameters: Vec<Parameter>,
+    pub return_type: TokenType,
+    pub body: Vec<Statement>,
 }
 
 struct AstCompiler {
@@ -893,12 +893,12 @@ impl Statement {
 
 #[derive(Debug, Clone)]
 pub struct Parameter {
-    pub(crate) name: Token,
-    pub(crate) var_type: TokenType,
+    pub name: Token,
+    pub var_type: TokenType,
 }
 
 impl Parameter {
-    pub(crate) fn new(name: impl Into<String>, value_type: TokenType) -> Self {
+    pub fn new(name: impl Into<String>, value_type: TokenType) -> Self {
         Self {
             name: Token {
                 token_type: TokenType::StringType,

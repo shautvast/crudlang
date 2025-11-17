@@ -1,5 +1,5 @@
-use crate::ast_pass::Expression::NamedParameter;
-use crate::ast_pass::{Expression, Function, Parameter, Statement};
+use crate::compiler::ast_pass::Expression::NamedParameter;
+use crate::compiler::ast_pass::{Expression, Function, Parameter, Statement};
 use crate::builtins::lookup;
 use crate::chunk::Chunk;
 use crate::errors::CompilerError::{IncompatibleTypes, UndeclaredVariable};
@@ -22,7 +22,7 @@ pub fn compile(
     compile_in_namespace(ast, qualified_name, symbols, registry)
 }
 
-pub(crate) fn compile_function(
+pub fn compile_function(
     function: &Function,
     symbols: &SymbolTable,
     registry: &mut Registry,
@@ -41,7 +41,7 @@ pub(crate) fn compile_function(
     Ok(chunk)
 }
 
-pub(crate) fn compile_in_namespace(
+pub fn compile_in_namespace(
     ast: &Vec<Statement>,
     namespace: Option<&str>,
     symbols: &SymbolTable,
@@ -54,7 +54,7 @@ pub(crate) fn compile_in_namespace(
     Ok(())
 }
 
-pub(crate) struct Compiler {
+pub struct Compiler {
     chunk: Chunk,
     _had_error: bool,
     current_line: usize,
@@ -62,7 +62,7 @@ pub(crate) struct Compiler {
 }
 
 impl Compiler {
-    pub(crate) fn new(name: &str) -> Self {
+    pub fn new(name: &str) -> Self {
         Self {
             chunk: Chunk::new(name),
             _had_error: false,
@@ -72,7 +72,7 @@ impl Compiler {
     }
 
     /// compile the entire AST into a chunk, adding a RETURN OP
-    pub(crate) fn compile(
+    pub fn compile(
         &mut self,
         ast: &Vec<Statement>,
         symbols: &SymbolTable,

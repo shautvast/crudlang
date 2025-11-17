@@ -1,8 +1,8 @@
 use crate::chunk::Chunk;
 use crate::errors::CrudLangError;
-use crate::scan_pass::scan;
+use crate::compiler::scan_pass::scan;
 use crate::vm::Vm;
-use crate::{ast_pass, bytecode_pass, map_underlying, symbol_builder};
+use crate::{compiler::ast_pass, compiler::bytecode_pass, map_underlying, symbol_builder};
 use arc_swap::ArcSwap;
 use std::collections::HashMap;
 use std::io;

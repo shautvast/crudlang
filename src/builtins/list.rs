@@ -1,4 +1,4 @@
-use crate::ast_pass::Parameter;
+use crate::compiler::ast_pass::Parameter;
 use crate::builtins::{FunctionMap, Signature, add, expected};
 use crate::errors::RuntimeError;
 use crate::tokens::TokenType;

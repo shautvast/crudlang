@@ -1,4 +1,4 @@
-use crate::ast_pass::{Expression, Parameter, Statement};
+use crate::compiler::ast_pass::{Expression, Parameter, Statement};
 use crate::builtins::lookup;
 use crate::errors::CompilerError;
 use crate::errors::CompilerError::IncompatibleTypes;
