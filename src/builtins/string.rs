@@ -103,7 +103,7 @@ fn string_replace_all(receiver: Value, args: Vec<Value>) -> Result<Value, Runtim
         Regex::new(s).map_err(|_| RuntimeError::IllegalArgumentException("Invalid regex".into()))?
     } else {
         return Err(RuntimeError::IllegalArgumentException(
-            format!("Illegal pattern. Expected a string, but got {}", &args[0]).into(),
+            format!("Illegal pattern. Expected a string, but got {}", &args[0]),
         ));
     };
     let replacement = if let Value::String(repl) = &args[1] {
@@ -114,7 +114,6 @@ fn string_replace_all(receiver: Value, args: Vec<Value>) -> Result<Value, Runtim
                 "Illegal replacement. Expected a string but got {}",
                 &args[1]
             )
-            .into(),
         ));
     };
     match receiver {

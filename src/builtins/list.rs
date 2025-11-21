@@ -17,6 +17,17 @@ macro_rules! mut_list_fn {
     };
 }
 
+macro_rules! list_fn {
+    ($list:ident, $args:ident => $body:expr) => {
+        |self_val: Value, $args: Vec<Value>| -> Result<Value, RuntimeError> {
+            match self_val {
+                Value::List($list) => $body,
+                _ => Err(expected_a_list()),
+            }
+        }
+    };
+}
+
 pub(crate) fn list_functions() -> FunctionMap {
     let mut list_functions: FunctionMap = HashMap::new();
     let functions = &mut list_functions;
@@ -26,7 +37,7 @@ pub(crate) fn list_functions() -> FunctionMap {
         Signature::new(
             vec![],
             U64,
-            mut_list_fn!(mut self_val, mut _args => Ok(u64(self_val.len() as u64))),
+            list_fn!(self_val, _args => Ok(u64(self_val.len() as u64))),
         ),
     );
     add(

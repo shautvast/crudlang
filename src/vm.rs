@@ -1,35 +1,15 @@
-use crate::Registry;
-use crate::chunk::Chunk;
-use crate::errors::RuntimeError::Something;
+use crate::compiler::asm_pass::{AsmChunk, Op};
 use crate::errors::{RuntimeError, ValueError};
-use crate::compiler::tokens::TokenType;
 use crate::value::{Object, Value};
+use crate::{AsmRegistry};
 use arc_swap::Guard;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
-
-pub struct Vm {
-    ip: usize,
-    stack: Vec<Value>,
-    local_vars: HashMap<String, Value>,
-    error_occurred: bool,
-    pub(crate) registry: Arc<HashMap<String, Chunk>>,
-}
-
-pub fn interpret(
-    registry: Guard<Arc<HashMap<String, Chunk>>>,
-    function: &str,
-) -> Result<Value, RuntimeError> {
-    let chunk = registry.get(function).unwrap().clone();
-    // chunk.disassemble();
-    let mut vm = Vm::new(&registry);
-    vm.run(&get_context(function), &chunk)
-    // Ok(Value::Void)
-}
+use crate::compiler::tokens::TokenType;
 
 pub async fn interpret_async(
-    registry: Guard<Arc<HashMap<String, Chunk>>>,
+    registry: Guard<Arc<HashMap<String, AsmChunk>>>,
     function: &str,
     uri: &str,
     query_params: HashMap<String, String>,
@@ -50,20 +30,27 @@ pub async fn interpret_async(
     }
 }
 
-fn value_map(strings: HashMap<String, String>) -> HashMap<Value, Value> {
-    strings
-        .into_iter()
-        .map(|(k, v)| (Value::String(k.to_string()), Value::String(v.to_string())))
-        .collect()
+pub fn interpret(registry: Guard<Arc<AsmRegistry>>, function: &str) -> Result<Value, RuntimeError> {
+    let chunk = registry.get(function).unwrap().clone();
+    let mut vm = Vm::new(&registry);
+    vm.run(&get_context(function), &chunk)
 }
 
-pub fn interpret_function(chunk: &Chunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
+pub fn interpret_function(chunk: &AsmChunk, args: Vec<Value>) -> Result<Value, RuntimeError> {
     let mut vm = Vm::new(&Arc::new(HashMap::new()));
     vm.run_function(chunk, args)
 }
 
+pub(crate) struct Vm {
+    ip: usize,
+    stack: Vec<Value>,
+    local_vars: HashMap<String, Value>,
+    error_occurred: bool,
+    pub(crate) registry: Arc<AsmRegistry>,
+}
+
 impl Vm {
-    pub(crate) fn new(registry: &Arc<Registry>) -> Self {
+    pub(crate) fn new(registry: &Arc<AsmRegistry>) -> Self {
         Self {
             ip: 0,
             stack: vec![],
@@ -73,7 +60,7 @@ impl Vm {
         }
     }
 
-    fn run_function(&mut self, chunk: &Chunk, mut args: Vec<Value>) -> Result<Value, RuntimeError> {
+    fn run_function(&mut self, chunk: &AsmChunk, mut args: Vec<Value>) -> Result<Value, RuntimeError> {
         // arguments -> locals
         for (_, name) in chunk.vars.iter() {
             self.local_vars.insert(name.clone(), args.remove(0));
@@ -81,117 +68,101 @@ impl Vm {
         self.run("", chunk)
     }
 
-    pub(crate) fn run(&mut self, context: &str, chunk: &Chunk) -> Result<Value, RuntimeError> {
+    pub(crate) fn run(&mut self, context: &str, chunk: &AsmChunk) -> Result<Value, RuntimeError> {
         self.ip = 0;
         loop {
-            if self.error_occurred {
-                return Err(Something);
-            }
-            debug!("{:?}", self.stack);
-            let opcode = chunk.code[self.ip];
+            let opcode = &chunk.code[self.ip];
             self.ip += 1;
             match opcode {
-                OP_CONSTANT => {
-                    let value = &chunk.constants[self.read(chunk)];
+                Op::Constant(c) => {
+                    let value = &chunk.constants[*c];
                     self.push(value.clone());
                 }
-                OP_ADD => binary_op(self, |a, b| a + b),
-                OP_SUBTRACT => binary_op(self, |a, b| a - b),
-                OP_MULTIPLY => binary_op(self, |a, b| a * b),
-                OP_DIVIDE => binary_op(self, |a, b| a / b),
-                OP_AND => binary_op(self, |a, b| {
+                Op::Add => binary_op(self, |a, b| a + b),
+                Op::Subtract => binary_op(self, |a, b| a - b),
+                Op::Multiply => binary_op(self, |a, b| a * b),
+                Op::Divide => binary_op(self, |a, b| a / b),
+                Op::And => binary_op(self, |a, b| {
                     if let (Value::Bool(a), Value::Bool(b)) = (a, b) {
                         Ok(Value::Bool(*a && *b))
                     } else {
                         Err(ValueError::Some("Cannot and"))
                     }
                 }),
-                OP_OR => binary_op(self, |a, b| {
+                Op::Or => binary_op(self, |a, b| {
                     if let (Value::Bool(a), Value::Bool(b)) = (a, b) {
                         Ok(Value::Bool(*a || *b))
                     } else {
                         Err(ValueError::Some("Cannot compare"))
                     }
                 }),
-                OP_NOT => unary_op(self, |a| !a),
-                OP_BITAND => binary_op(self, |a, b| a & b),
-                OP_BITOR => binary_op(self, |a, b| a | b),
-                OP_BITXOR => binary_op(self, |a, b| a ^ b),
-                OP_NEGATE => unary_op(self, |a| -a),
-                OP_RETURN => {
-                    debug!("return {:?}", self.stack);
+                Op::Not => unary_op(self, |a| !a),
+                Op::BitAnd => binary_op(self, |a, b| a & b),
+                Op::BitOr => binary_op(self, |a, b| a | b),
+                Op::BitXor => binary_op(self, |a, b| a ^ b),
+                Op::Negate => unary_op(self, |a| -a),
+                Op::Return => {
                     return if self.stack.is_empty() {
                         Ok(Value::Void)
                     } else {
                         Ok(self.pop())
                     };
                 }
-                OP_SHL => binary_op(self, |a, b| a << b),
-                OP_SHR => binary_op(self, |a, b| a >> b),
-                OP_EQUAL => binary_op(self, |a, b| Ok(Value::Bool(a == b))),
-                OP_GREATER => binary_op(self, |a, b| Ok(Value::Bool(a > b))),
-                OP_GREATER_EQUAL => binary_op(self, |a, b| Ok(Value::Bool(a >= b))),
-                OP_LESS => binary_op(self, |a, b| Ok(Value::Bool(a < b))),
-                OP_LESS_EQUAL => binary_op(self, |a, b| Ok(Value::Bool(a <= b))),
-                OP_PRINT => {
+                Op::Shl => binary_op(self, |a, b| a << b),
+                Op::Shr => binary_op(self, |a, b| a >> b),
+                Op::Equal => binary_op(self, |a, b| Ok(Value::Bool(a == b))),
+                Op::Greater => binary_op(self, |a, b| Ok(Value::Bool(a > b))),
+                Op::GreaterEqual => binary_op(self, |a, b| Ok(Value::Bool(a >= b))),
+                Op::Less => binary_op(self, |a, b| Ok(Value::Bool(a < b))),
+                Op::LessEqual => binary_op(self, |a, b| Ok(Value::Bool(a <= b))),
+                Op::NotEqual => binary_op(self, |a, b| Ok(Value::Bool(a != b))),
+                Op::Print => {
                     debug!("print {:?}", self.stack);
                     let v = self.pop();
                     println!("{}", v);
                 }
-                OP_DEFINE => {
-                    let name = self.read_name(chunk);
-                    let value = self.pop();
-                    self.local_vars.insert(name, value);
-                }
-                OP_DEF_LIST => {
-                    let len = self.read(chunk);
+                Op::DefList(len) => {
                     let mut list = vec![];
-                    for _ in 0..len {
+                    for _ in 0..*len {
                         let value = self.pop();
                         list.push(value);
                     }
                     list.reverse();
                     self.push(Value::List(list));
                 }
-                OP_ASSIGN => {
-                    let index = self.read(chunk);
-                    let (var_type, name) = chunk.vars.get(index).unwrap();
+                Op::Assign(var_index) =>{
+                    let (var_type, name) = chunk.vars.get(*var_index).unwrap();
                     let value = self.pop();
-                    let value = Self::number(var_type, value)?;
+                    let value = number(var_type, value)?;
                     self.local_vars.insert(name.to_string(), value); //insert or update
                 }
-                OP_DEF_MAP => {
-                    let len = self.read(chunk);
+                Op::DefMap(len) => {
                     let mut map = HashMap::new();
-                    for _ in 0..len {
+                    for _ in 0..*len {
                         let value = self.pop();
                         let key = self.pop();
                         map.insert(key, value);
                     }
                     self.push(Value::Map(map));
                 }
-                OP_GET => {
-                    let var_index = self.read(chunk);
-                    let (_, name_index) = chunk.vars.get(var_index).unwrap();
+                Op::Get(var_index) => {
+                    let (_, name_index) = chunk.vars.get(*var_index).unwrap();
                     let value = self.local_vars.get(name_index).unwrap().clone();
                     self.push(value);
                 }
-                OP_LIST_GET => {
+                Op::ListGet => {
                     let index = self.pop();
                     let list = self.pop();
                     if let Value::List(list) = list {
                         self.push(list.get(index.cast_usize()?).cloned().unwrap())
                     }
                 }
-                OP_CALL_BUILTIN => {
-                    let function_name_index = self.read(chunk);
-                    let function_name = chunk.constants[function_name_index].to_string();
-                    let function_type_index = self.read(chunk);
-                    let receiver_type_name = chunk.constants[function_type_index].to_string();
+                Op::CallBuiltin(function_name_index, function_type_index, num_args) => {
+                    let function_name = chunk.constants[*function_name_index].to_string();
+                    let receiver_type_name = chunk.constants[*function_type_index].to_string();
 
-                    let num_args = self.read(chunk);
                     let mut args = vec![];
-                    for _ in 0..num_args {
+                    for _ in 0..*num_args {
                         let arg = self.pop();
                         args.push(arg);
                     }
@@ -201,21 +172,16 @@ impl Vm {
                         crate::builtins::call(&receiver_type_name, &function_name, receiver, args)?;
                     self.push(return_value);
                 }
-                OP_POP => {
-                    self.pop(); // discards the value
-                }
-                OP_CALL => {
-                    let function_name_index = self.read(chunk);
-                    let num_args = self.read(chunk);
-
+                Op::Pop => {self.pop();}
+                Op::Call(function_name_index, num_args) => {
                     let mut args = vec![];
-                    for _ in 0..num_args {
+                    for _ in 0..*num_args {
                         let arg = self.pop();
                         args.push(arg);
                     }
                     args.reverse();
 
-                    let function_name = chunk.constants[function_name_index].to_string();
+                    let function_name = chunk.constants[*function_name_index].to_string();
                     let function_chunk = self
                         .registry
                         .get(&function_name)
@@ -250,53 +216,28 @@ impl Vm {
                         self.push(result);
                     }
                 }
-                OP_GOTO_NIF => {
+                Op::GotoIfNot(goto_addr) => {
                     let b = self.pop();
-                    let goto_addr = self.read(chunk);
                     if b == Value::Bool(false) {
-                        self.ip = goto_addr;
+                        self.ip = *goto_addr;
                     }
                 }
-                OP_GOTO_IF => {
+                Op::GotoIf(goto_addr) => {
                     let b = self.pop();
-                    let goto_addr = self.read(chunk);
                     if b == Value::Bool(true) {
-                        self.ip = goto_addr;
+                        self.ip = *goto_addr;
                     }
                 }
-                OP_GOTO => {
-                    let goto_addr = self.read(chunk);
-                    self.ip = goto_addr;
+                Op::Goto(goto_addr) => {
+                    self.ip = *goto_addr;
                 }
-                OP_DUP =>{
+                Op::Dup =>{
                     let value = self.pop();
                     self.push(value.clone());
                     self.push(value);
                 }
-                _ => {}
             }
         }
-    }
-
-    fn number(var_type: &TokenType, value: Value) -> Result<Value, RuntimeError> {
-        let value = match var_type {
-            TokenType::U32 => value.cast_u32()?,
-            TokenType::U64 => value.cast_u64()?,
-            TokenType::F32 => value.cast_f32()?,
-            TokenType::I32 => value.cast_i32()?,
-            _ => value,
-        };
-        Ok(value)
-    }
-
-    fn read(&mut self, chunk: &Chunk) -> usize {
-        self.ip += 1;
-        chunk.code[self.ip - 1] as usize
-    }
-
-    fn read_name(&mut self, chunk: &Chunk) -> String {
-        let index = self.read(chunk);
-        chunk.constants[index].to_string() //string??
     }
 
     fn push(&mut self, value: Value) {
@@ -341,51 +282,20 @@ pub(crate) fn get_context(path: &str) -> String {
     parts.join("/")
 }
 
-pub const OP_CONSTANT: u16 = 1;
-pub const OP_ADD: u16 = 2;
-pub const OP_SUBTRACT: u16 = 3;
-pub const OP_MULTIPLY: u16 = 4;
-pub const OP_DIVIDE: u16 = 5;
-pub const OP_NEGATE: u16 = 6;
-pub const OP_PRINT: u16 = 7;
-pub const OP_RETURN: u16 = 8;
-pub const OP_CALL: u16 = 9;
-pub const OP_DEF_FN: u16 = 10;
-pub const OP_AND: u16 = 11;
-pub const OP_OR: u16 = 12;
-pub const OP_NOT: u16 = 13;
-pub const OP_EQUAL: u16 = 14;
-pub const OP_GREATER: u16 = 15;
-pub const OP_LESS: u16 = 16;
-pub const OP_NOT_EQUAL: u16 = 17;
-pub const OP_GREATER_EQUAL: u16 = 18;
-pub const OP_LESS_EQUAL: u16 = 19;
-pub const OP_BITAND: u16 = 20;
-pub const OP_BITOR: u16 = 21;
-pub const OP_BITXOR: u16 = 22;
-pub const OP_SHR: u16 = 23;
-pub const OP_SHL: u16 = 24;
-pub const OP_POP: u16 = 25;
-pub const OP_DEFINE: u16 = 26; // may be obsolete already
-pub const OP_GET: u16 = 27;
-pub const OP_DEF_I32: u16 = 28;
-pub const OP_DEF_I64: u16 = 29;
-pub const OP_DEF_U32: u16 = 30;
-pub const OP_DEF_U64: u16 = 31;
-pub const OP_DEF_DATE: u16 = 32;
-pub const OP_DEF_STRING: u16 = 33;
-pub const OP_DEF_CHAR: u16 = 34;
-pub const OP_DEF_BOOL: u16 = 35;
-pub const OP_DEF_LIST: u16 = 36;
-pub const OP_DEF_MAP: u16 = 37;
-pub const OP_DEF_STRUCT: u16 = 38;
-pub const OP_DEF_F32: u16 = 39;
-pub const OP_DEF_F64: u16 = 40;
-pub const OP_ASSIGN: u16 = 41;
-pub const OP_LIST_GET: u16 = 42;
-pub const OP_CALL_BUILTIN: u16 = 43;
-pub const OP_DUP: u16 = 44;
-// pub const OP_IF_ELSE: u16 = 45;
-pub const OP_GOTO_IF: u16 = 46;
-pub const OP_GOTO_NIF: u16 = 48;
-pub const OP_GOTO: u16 = 47;
+fn number(var_type: &TokenType, value: Value) -> Result<Value, RuntimeError> {
+    let value = match var_type {
+        TokenType::U32 => value.cast_u32()?,
+        TokenType::U64 => value.cast_u64()?,
+        TokenType::F32 => value.cast_f32()?,
+        TokenType::I32 => value.cast_i32()?,
+        _ => value,
+    };
+    Ok(value)
+}
+
+fn value_map(strings: HashMap<String, String>) -> HashMap<Value, Value> {
+    strings
+        .into_iter()
+        .map(|(k, v)| (Value::String(k.to_string()), Value::String(v.to_string())))
+        .collect()
+}

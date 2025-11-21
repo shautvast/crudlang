@@ -1,8 +1,9 @@
-use crate::chunk::Chunk;
-use crate::errors::CrudLangError;
+use crate::compiler::asm_pass::AsmChunk;
 use crate::compiler::scan_pass::scan;
+use crate::compiler::{asm_pass, ast_pass, map_underlying};
+use crate::errors::CrudLangError;
+use crate::symbol_builder;
 use crate::vm::Vm;
-use crate::{compiler::ast_pass, compiler::bytecode_pass, map_underlying, symbol_builder};
 use arc_swap::ArcSwap;
 use std::collections::HashMap;
 use std::io;
@@ -10,12 +11,12 @@ use std::io::Write;
 use std::ops::Deref;
 use std::sync::Arc;
 
-pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudLangError> {
+pub fn start(registry: Arc<ArcSwap<HashMap<String, AsmChunk>>>) -> Result<(), CrudLangError> {
     println!("REPL started -- Type ctrl-c to exit (both the repl and the server)");
     println!(":h for help");
     let mut symbol_table = HashMap::new();
     let mut vm = Vm::new(&registry.load());
-    let mut bytecode_compiler = bytecode_pass::Compiler::new("main");
+    let mut asm_pass = asm_pass::AsmPass::new("main");
     loop {
         print!(">");
         io::stdout().flush().map_err(map_underlying())?;
@@ -34,7 +35,7 @@ pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudL
 
                 let tokens = scan(input)?;
 
-                let ast = match ast_pass::compile(None, tokens, &mut symbol_table){
+                let ast = match ast_pass::compile(None, tokens, &mut symbol_table) {
                     Ok(ast) => ast,
                     Err(e) => {
                         println!("{}", e);
@@ -43,7 +44,7 @@ pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudL
                 };
                 symbol_builder::build("", &ast, &mut symbol_table);
 
-                match bytecode_compiler.compile(&ast, &symbol_table, &mut registry_copy, "") {
+                match asm_pass.compile(&ast, &symbol_table, &mut registry_copy, "") {
                     Ok(chunk) => {
                         registry_copy.insert("main".to_string(), chunk);
                         registry.store(Arc::new(registry_copy));
@@ -67,7 +68,7 @@ pub fn start(registry: Arc<ArcSwap<HashMap<String, Chunk>>>) -> Result<(), CrudL
     }
 }
 
-fn list_endpoints(registry: Arc<HashMap<String, Chunk>>) {
+fn list_endpoints(registry: Arc<HashMap<String, AsmChunk>>) {
     registry
         .iter()
         .filter(|(k, _)| k.contains("get"))
@@ -76,7 +77,7 @@ fn list_endpoints(registry: Arc<HashMap<String, Chunk>>) {
         });
 }
 
-fn list_functions(registry: Arc<HashMap<String, Chunk>>) {
+fn list_functions(registry: Arc<HashMap<String, AsmChunk>>) {
     registry.iter().for_each(|(k, _)| {
         println!("{}", k); //number
     });

@@ -5,8 +5,8 @@ mod tests {
     use crate::errors::CrudLangError::{Compiler, Runtime};
     use crate::errors::RuntimeError::{IllegalArgumentException, IndexOutOfBounds};
     use crate::value::{Value, string};
-    use crate::{compile, run};
     use chrono::DateTime;
+    use crate::compiler::{compile, run};
 
     #[test]
     fn literal_int() {

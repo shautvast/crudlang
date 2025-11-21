@@ -36,7 +36,7 @@ pub(crate) fn string(v: impl Into<String>) -> Value {
     Value::String(v.into())
 }
 
-pub(crate) fn i64(v: impl Into<i64>) -> Value {
+pub(crate) fn _i64(v: impl Into<i64>) -> Value {
     Value::I64(v.into())
 }
 

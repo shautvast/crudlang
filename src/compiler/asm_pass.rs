@@ -1,15 +1,14 @@
+use crate::builtins::lookup;
+use crate::compiler::asm_pass::Op::{Add, And, Assign, BitAnd, BitOr, BitXor, Call, CallBuiltin, Constant, DefList, DefMap, Divide, Dup, Equal, Get, Goto, GotoIf, GotoIfNot, Greater, GreaterEqual, Less, LessEqual, ListGet, Multiply, Negate, Not, NotEqual, Or, Pop, Print, Return, Shr, Subtract};
 use crate::compiler::ast_pass::Expression::NamedParameter;
 use crate::compiler::ast_pass::{Expression, Function, Parameter, Statement};
-use crate::builtins::lookup;
-use crate::chunk::Chunk;
+use crate::compiler::tokens::TokenType;
+use crate::compiler::tokens::TokenType::Unknown;
 use crate::errors::CompilerError::{IncompatibleTypes, UndeclaredVariable};
 use crate::errors::{CompilerError, CompilerErrorAtLine};
 use crate::symbol_builder::{Symbol, calculate_type, infer_type};
-use crate::compiler::tokens::TokenType;
-use crate::compiler::tokens::TokenType::Unknown;
 use crate::value::Value;
-use crate::vm::{OP_ADD, OP_AND, OP_ASSIGN, OP_BITAND, OP_BITOR, OP_BITXOR, OP_CALL, OP_CALL_BUILTIN, OP_CONSTANT, OP_DEF_LIST, OP_DEF_MAP, OP_DIVIDE, OP_DUP, OP_EQUAL, OP_GET, OP_GOTO, OP_GOTO_IF, OP_GOTO_NIF, OP_GREATER, OP_GREATER_EQUAL, OP_LESS, OP_LESS_EQUAL, OP_LIST_GET, OP_MULTIPLY, OP_NEGATE, OP_NOT, OP_OR, OP_POP, OP_PRINT, OP_RETURN, OP_SHL, OP_SHR, OP_SUBTRACT};
-use crate::{Registry, SymbolTable};
+use crate::{AsmRegistry, SymbolTable};
 use std::collections::HashMap;
 use std::ops::Deref;
 
@@ -17,7 +16,7 @@ pub fn compile(
     qualified_name: Option<&str>,
     ast: &Vec<Statement>,
     symbols: &SymbolTable,
-    registry: &mut Registry,
+    registry: &mut AsmRegistry,
 ) -> Result<(), CompilerErrorAtLine> {
     compile_in_namespace(ast, qualified_name, symbols, registry)
 }
@@ -25,11 +24,11 @@ pub fn compile(
 pub fn compile_function(
     function: &Function,
     symbols: &SymbolTable,
-    registry: &mut Registry,
+    registry: &mut AsmRegistry,
     namespace: &str,
-) -> Result<Chunk, CompilerErrorAtLine> {
+) -> Result<AsmChunk, CompilerErrorAtLine> {
     let fn_name = &function.name.lexeme;
-    let mut compiler = Compiler::new(fn_name);
+    let mut compiler = AsmPass::new(fn_name);
     for parm in &function.parameters {
         let name = parm.name.lexeme.clone();
         let var_index = compiler.chunk.add_var(&parm.var_type, &parm.name.lexeme);
@@ -45,26 +44,81 @@ pub fn compile_in_namespace(
     ast: &Vec<Statement>,
     namespace: Option<&str>,
     symbols: &SymbolTable,
-    registry: &mut Registry,
+    registry: &mut AsmRegistry,
 ) -> Result<(), CompilerErrorAtLine> {
     let name = namespace.unwrap_or("main");
-    let mut compiler = Compiler::new(name);
+    let mut compiler = AsmPass::new(name);
     let chunk = compiler.compile(ast, symbols, registry, name)?;
     registry.insert(name.to_string(), chunk);
     Ok(())
 }
 
-pub struct Compiler {
-    chunk: Chunk,
+#[derive(Clone)]
+pub struct AsmChunk {
+    pub(crate) name: String,
+    pub code: Vec<Op>,
+    pub constants: Vec<Value>,
+    lines: Vec<usize>,
+    pub(crate) object_defs: HashMap<String, Vec<Parameter>>,
+    pub(crate) function_parameters: Vec<Parameter>,
+    pub vars: Vec<(TokenType, String)>,
+}
+
+impl AsmChunk {
+    pub(crate) fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            code: Vec::new(),
+            constants: vec![],
+            lines: vec![],
+            object_defs: HashMap::new(),
+            function_parameters: vec![],
+            vars: vec![],
+        }
+    }
+
+    pub(crate) fn add(&mut self, op: Op, line: usize) {
+        self.code.push(op);
+        self.lines.push(line);
+    }
+
+    pub(crate) fn add_constant(&mut self, value: impl Into<Value>) -> usize {
+        self.constants.push(value.into());
+        self.constants.len() - 1
+    }
+
+    pub(crate) fn find_constant(&self, p0: &String) -> Option<usize> {
+        for (i, constant) in self.constants.iter().enumerate() {
+            if let Value::String(s) = constant
+                && s == p0
+            {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub(crate) fn add_var(&mut self, var_type: &TokenType, name: &str) -> usize {
+        self.vars.push((var_type.clone(), name.to_string()));
+        self.vars.len() - 1
+    }
+
+    pub(crate) fn add_object_def(&mut self, name: &str, fields: &[Parameter]) {
+        self.object_defs.insert(name.to_string(), fields.to_vec());
+    }
+}
+
+pub struct AsmPass {
+    chunk: AsmChunk,
     _had_error: bool,
     current_line: usize,
     vars: HashMap<String, usize>,
 }
 
-impl Compiler {
+impl AsmPass {
     pub fn new(name: &str) -> Self {
         Self {
-            chunk: Chunk::new(name),
+            chunk: AsmChunk::new(name),
             _had_error: false,
             current_line: 0,
             vars: HashMap::new(),
@@ -76,11 +130,11 @@ impl Compiler {
         &mut self,
         ast: &Vec<Statement>,
         symbols: &SymbolTable,
-        registry: &mut Registry,
+        registry: &mut AsmRegistry,
         namespace: &str,
-    ) -> Result<Chunk, CompilerErrorAtLine> {
+    ) -> Result<AsmChunk, CompilerErrorAtLine> {
         self.compile_statements(ast, symbols, registry, namespace)?;
-        self.emit_byte(OP_RETURN);
+        self.emit(Return);
         let chunk = self.chunk.clone();
         self.chunk.code.clear(); // in case the compiler is reused, clear it for the next compilation. This is for the REPL
         Ok(chunk)
@@ -91,7 +145,7 @@ impl Compiler {
         &mut self,
         ast: &Vec<Statement>,
         symbols: &SymbolTable,
-        registry: &mut Registry,
+        registry: &mut AsmRegistry,
         namespace: &str,
     ) -> Result<(), CompilerErrorAtLine> {
         for statement in ast {
@@ -105,7 +159,7 @@ impl Compiler {
         &mut self,
         statement: &Statement,
         symbols: &SymbolTable,
-        registry: &mut Registry,
+        registry: &mut AsmRegistry,
         namespace: &str,
     ) -> Result<(), CompilerErrorAtLine> {
         self.current_line = statement.line();
@@ -127,7 +181,7 @@ impl Compiler {
                     let name_index = self.chunk.add_var(var_type, name);
                     self.vars.insert(name.to_string(), name_index);
                     self.compile_expression(namespace, initializer, symbols, registry)?;
-                    self.emit_bytes(OP_ASSIGN, name_index as u16);
+                    self.emit(Assign(name_index));
                 } else {
                     return Err(self.raise(UndeclaredVariable(name.to_string())));
                 }
@@ -135,7 +189,7 @@ impl Compiler {
             // replace with function
             Statement::PrintStmt { value } => {
                 self.compile_expression(namespace, value, symbols, registry)?;
-                self.emit_byte(OP_PRINT);
+                self.emit(Print);
             }
             Statement::ExpressionStmt { expression } => {
                 self.compile_expression(namespace, expression, symbols, registry)?;
@@ -161,30 +215,23 @@ impl Compiler {
             } => {
                 self.compile_expression(namespace, condition, symbols, registry)?;
 
-                self.emit_byte(OP_DUP);
-                self.emit_bytes(OP_GOTO_NIF, 0);
-                let goto_addr1 = self.chunk.code.len()-1;
-                self.emit_byte(OP_POP);
+                self.emit(Dup);
+                self.emit(GotoIfNot(0)); // placeholder
+                let goto_addr1 = self.chunk.code.len() - 1;
+                self.emit(Pop);
                 self.compile_statements(then_branch, symbols, registry, namespace)?;
-                self.emit_bytes(OP_GOTO, 0);
-                let goto_addr2 = self.chunk.code.len()-1;
+                self.emit(Goto(0));
+                let goto_addr2 = self.chunk.code.len() - 1;// placeholder
+                self.chunk.code[goto_addr1] = GotoIfNot(self.chunk.code.len());
                 if else_branch.is_some() {
-                    self.chunk.code[goto_addr1] = self.chunk.code.len() as u16;
-                    self.emit_bytes(OP_GOTO_IF, 0);
-                    let goto_addr3 = self.chunk.code.len() - 1;
-
                     self.compile_statements(
                         else_branch.as_ref().unwrap(),
                         symbols,
                         registry,
                         namespace,
                     )?;
-
-                    self.chunk.code[goto_addr2] = self.chunk.code.len() as u16; // fill in the placeholder
-                    self.chunk.code[goto_addr3] = self.chunk.code.len() as u16; // fill in the placeholder
-                } else {
-                    self.chunk.code[goto_addr1] = self.chunk.code.len() as u16;
                 }
+                self.chunk.code[goto_addr2]= Op::Goto(self.chunk.code.len());
             }
             Statement::ForStatement {
                 loop_var,
@@ -204,19 +251,19 @@ impl Compiler {
                 self.vars.insert(name.to_string(), loop_var_name_index);
 
                 // 3. start index
-                self.emit_bytes(OP_CONSTANT, start_index as u16);
-                self.emit_bytes(OP_ASSIGN, loop_var_name_index as u16);
+                self.emit(Constant(start_index));
+                self.emit(Assign(loop_var_name_index));
 
                 let return_addr = self.chunk.code.len();
                 self.compile_statements(body, symbols, registry, namespace)?;
-                self.emit_bytes(OP_GET, loop_var_name_index as u16);
-                self.emit_bytes(OP_CONSTANT, step_const_index);
-                self.emit_byte(OP_ADD);
-                self.emit_bytes(OP_ASSIGN, loop_var_name_index as u16);
-                self.emit_bytes(OP_CONSTANT, end_index as u16);
-                self.emit_bytes(OP_GET, loop_var_name_index as u16);
-                self.emit_byte(OP_GREATER_EQUAL);
-                self.emit_bytes(OP_GOTO_IF, return_addr as u16);
+                self.emit(Get(loop_var_name_index));
+                self.emit(Constant(step_const_index));
+                self.emit(Add);
+                self.emit(Assign(loop_var_name_index));
+                self.emit(Constant(end_index));
+                self.emit(Get(loop_var_name_index));
+                self.emit(GreaterEqual);
+                self.emit(GotoIf(return_addr));
             }
         }
         Ok(())
@@ -227,7 +274,7 @@ impl Compiler {
         namespace: &str,
         expression: &Expression,
         symbols: &SymbolTable,
-        registry: &mut Registry,
+        registry: &mut AsmRegistry,
     ) -> Result<(), CompilerErrorAtLine> {
         match expression {
             Expression::FunctionCall {
@@ -244,16 +291,14 @@ impl Compiler {
                             namespace, symbols, registry, arguments, parameters,
                         )?;
 
-                        self.emit_bytes(OP_CALL, name_index as u16);
-                        self.emit_byte(arguments.len() as u16);
+                        self.emit(Call(name_index,arguments.len()));
                     }
                     // constructor function
                     Some(Symbol::Object { fields, .. }) => {
                         self.get_arguments_in_order(
                             namespace, symbols, registry, arguments, fields,
                         )?;
-                        self.emit_bytes(OP_CALL, name_index as u16);
-                        self.emit_byte(arguments.len() as u16);
+                        self.emit(Call(name_index,arguments.len()));
                     }
                     _ => {
                         return Err(self.raise(CompilerError::FunctionNotFound(name.to_string())));
@@ -293,15 +338,16 @@ impl Compiler {
                     arguments,
                     &signature.parameters,
                 )?;
-                self.emit_byte(OP_CALL_BUILTIN);
-                self.emit_byte(name_index as u16);
-                self.emit_byte(type_index as u16);
-                self.emit_byte(arguments.len() as u16);
+                self.emit(CallBuiltin(
+                    name_index,
+                    type_index,
+                    arguments.len(),
+                ));
             }
             Expression::Variable { name, .. } => {
                 let name_index = self.vars.get(name);
                 if let Some(name_index) = name_index {
-                    self.emit_bytes(OP_GET, *name_index as u16);
+                    self.emit(Get(*name_index));
                 } else {
                     return Err(self.raise(UndeclaredVariable(name.to_string())));
                 }
@@ -314,7 +360,7 @@ impl Compiler {
                 self.compile_expression(namespace, value, symbols, registry)?;
                 let name_index = self.vars.get(variable_name);
                 if let Some(name_index) = name_index {
-                    self.emit_bytes(OP_ASSIGN, *name_index as u16);
+                    self.emit(Assign(*name_index));
                 } else {
                     return Err(self.raise(UndeclaredVariable(variable_name.to_string())));
                 }
@@ -326,14 +372,14 @@ impl Compiler {
                 for expr in values {
                     self.compile_expression(namespace, expr, symbols, registry)?;
                 }
-                self.emit_bytes(OP_DEF_LIST, values.len() as u16);
+                self.emit(DefList(values.len()));
             }
             Expression::Map { entries, .. } => {
                 for (key, value) in entries {
                     self.compile_expression(namespace, key, symbols, registry)?;
                     self.compile_expression(namespace, value, symbols, registry)?;
                 }
-                self.emit_bytes(OP_DEF_MAP, entries.len() as u16);
+                self.emit(DefMap(entries.len()));
             }
             Expression::Grouping { expression, .. } => {
                 self.compile_expression(namespace, expression, symbols, registry)?
@@ -344,10 +390,10 @@ impl Compiler {
                 self.compile_expression(namespace, right, symbols, registry)?;
                 match operator.token_type {
                     TokenType::Minus => {
-                        self.emit_byte(OP_NEGATE);
+                        self.emit(Negate);
                     }
                     TokenType::Bang => {
-                        self.emit_byte(OP_NOT);
+                        self.emit(Not);
                     }
                     _ => unimplemented!("unary other than ! and -"),
                 }
@@ -361,31 +407,32 @@ impl Compiler {
                 self.compile_expression(namespace, left, symbols, registry)?;
                 self.compile_expression(namespace, right, symbols, registry)?;
                 match operator.token_type {
-                    TokenType::BitAnd => self.emit_byte(OP_BITAND),
-                    TokenType::BitXor => self.emit_byte(OP_BITXOR),
+                    TokenType::BitAnd => self.emit(BitAnd),
+                    TokenType::BitXor => self.emit(BitXor),
                     TokenType::Equal => {
                         if let Expression::Variable { name, .. } = left.deref() {
                             let index = self.vars.get(name).unwrap();
-                            self.emit_bytes(OP_ASSIGN, *index as u16);
-                            self.emit_byte(OP_POP);
+                            self.emit(Assign(*index));
+                            self.emit(Pop);
                         } else {
                             return Err(self.raise(UndeclaredVariable("".to_string())));
                         }
                     }
-                    TokenType::EqualEqual => self.emit_byte(OP_EQUAL),
-                    TokenType::Greater => self.emit_byte(OP_GREATER),
-                    TokenType::GreaterEqual => self.emit_byte(OP_GREATER_EQUAL),
-                    TokenType::GreaterGreater => self.emit_byte(OP_SHR),
-                    TokenType::Less => self.emit_byte(OP_LESS),
-                    TokenType::LessEqual => self.emit_byte(OP_LESS_EQUAL),
-                    TokenType::LessLess => self.emit_byte(OP_SHL),
-                    TokenType::LogicalAnd => self.emit_byte(OP_AND),
-                    TokenType::LogicalOr => self.emit_byte(OP_OR),
-                    TokenType::Minus => self.emit_byte(OP_SUBTRACT),
-                    TokenType::Pipe => self.emit_byte(OP_BITOR),
-                    TokenType::Plus => self.emit_byte(OP_ADD),
-                    TokenType::Slash => self.emit_byte(OP_DIVIDE),
-                    TokenType::Star => self.emit_byte(OP_MULTIPLY),
+                    TokenType::EqualEqual => self.emit(Equal),
+                    TokenType::BangEqual => self.emit(NotEqual),
+                    TokenType::Greater => self.emit(Greater),
+                    TokenType::GreaterEqual => self.emit(GreaterEqual),
+                    TokenType::GreaterGreater => self.emit(Shr),
+                    TokenType::Less => self.emit(Less),
+                    TokenType::LessEqual => self.emit(LessEqual),
+                    TokenType::LessLess => self.emit(Op::Shl),
+                    TokenType::LogicalAnd => self.emit(And),
+                    TokenType::LogicalOr => self.emit(Or),
+                    TokenType::Minus => self.emit(Subtract),
+                    TokenType::Pipe => self.emit(BitOr),
+                    TokenType::Plus => self.emit(Add),
+                    TokenType::Slash => self.emit(Divide),
+                    TokenType::Star => self.emit(Multiply),
                     _ => unimplemented!("binary other than plus, minus, star, slash"),
                 }
             }
@@ -396,7 +443,7 @@ impl Compiler {
             Expression::ListGet { index, list } => {
                 self.compile_expression(namespace, list, symbols, registry)?;
                 self.compile_expression(namespace, index, symbols, registry)?;
-                self.emit_byte(OP_LIST_GET);
+                self.emit(ListGet);
             }
             Expression::MapGet { .. } => {}
             Expression::FieldGet { .. } => {}
@@ -415,7 +462,7 @@ impl Compiler {
         &mut self,
         namespace: &str,
         symbols: &SymbolTable,
-        registry: &mut Registry,
+        registry: &mut AsmRegistry,
         arguments: &[Expression],
         parameters: &[Parameter],
     ) -> Result<(), CompilerErrorAtLine> {
@@ -441,22 +488,55 @@ impl Compiler {
         Ok(())
     }
 
-    fn emit_byte(&mut self, byte: u16) {
-        self.chunk.add(byte, self.current_line);
+    fn emit(&mut self, op: Op) {
+        self.chunk.add(op, self.current_line);
     }
 
-    fn emit_bytes(&mut self, b1: u16, b2: u16) {
-        self.emit_byte(b1);
-        self.emit_byte(b2);
-    }
-
-    fn emit_constant(&mut self, value: Value) -> u16 {
-        let index = self.chunk.add_constant(value) as u16;
-        self.emit_bytes(OP_CONSTANT, index);
+    fn emit_constant(&mut self, value: Value) -> usize {
+        let index = self.chunk.add_constant(value);
+        self.emit(Constant(index));
         index
     }
 
     fn raise(&self, error: CompilerError) -> CompilerErrorAtLine {
         CompilerErrorAtLine::raise(error, self.current_line)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Op {
+    Constant(usize),
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Negate,
+    Print,
+    Return,
+    Call(usize,usize),
+    And,
+    Or,
+    Not,
+    Equal,
+    Greater,
+    Less,
+    NotEqual,
+    GreaterEqual,
+    LessEqual,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shr,
+    Shl,
+    Pop,
+    Get(usize),
+    DefList(usize),
+    DefMap(usize),
+    Assign(usize),
+    ListGet,
+    CallBuiltin(usize, usize, usize),
+    Dup,
+    GotoIf(usize),
+    GotoIfNot(usize),
+    Goto(usize),
 }

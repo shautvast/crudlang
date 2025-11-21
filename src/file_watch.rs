@@ -1,5 +1,3 @@
-use crate::chunk::Chunk;
-use crate::compile_sourcedir;
 use notify::{RecursiveMode, Watcher};
 use std::collections::HashMap;
 use std::path::Path;
@@ -9,10 +7,12 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 use arc_swap::ArcSwap;
 use log::info;
+use crate::compiler::asm_pass::AsmChunk;
+use crate::compiler::compile_sourcedir;
 
 const ONE_SEC: Duration = Duration::from_secs(1);
 
-pub fn start_watch_daemon(source: &str, registry: Arc<ArcSwap<HashMap<String, Chunk>>>) {
+pub fn start_watch_daemon(source: &str, registry: Arc<ArcSwap<HashMap<String, AsmChunk>>>) {
     let source = source.to_string();
     let s = source.to_string();
     let (tx, rx) = channel();

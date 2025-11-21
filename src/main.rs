@@ -3,14 +3,14 @@ use axum::http::StatusCode;
 use axum::routing::any;
 use axum::{Json, Router};
 use clap::Parser;
-use tipi_lang::chunk::Chunk;
 use tipi_lang::errors::CrudLangError;
 use tipi_lang::vm::interpret_async;
-use tipi_lang::{compile_sourcedir, map_underlying};
 use std::collections::HashMap;
 use std::sync::Arc;
 use arc_swap::ArcSwap;
 use log::info;
+use tipi_lang::compiler::asm_pass::AsmChunk;
+use tipi_lang::compiler::{compile_sourcedir, map_underlying};
 
 /// A simple CLI tool to greet users
 #[derive(Parser, Debug)]
@@ -72,7 +72,7 @@ async fn main() -> Result<(), CrudLangError> {
 
 #[derive(Clone)]
 struct AppState {
-    registry: Arc<ArcSwap<HashMap<String, Chunk>>>,
+    registry: Arc<ArcSwap<HashMap<String, AsmChunk>>>,
 }
 
 async fn handle_any(
