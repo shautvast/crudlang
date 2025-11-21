@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::compiler::{compile, run};
-    use crate::errors::CompilerError::IllegalArgumentsException;
+    use crate::errors::CompilerError::{IllegalArgumentsException, ReservedFunctionName};
     use crate::errors::CompilerErrorAtLine;
     use crate::errors::RuntimeError::{IllegalArgumentException, IndexOutOfBounds};
     use crate::errors::TipiLangError::{Compiler, Runtime};
@@ -415,6 +415,12 @@ sum
         let value = value.unwrap();
         let date_time_string = value.to_string();
         assert!(DateTime::parse_from_str(&date_time_string, DATE_FORMAT_TIMEZONE).is_ok());
+    }
+
+    #[test]
+    fn global_fns_are_not_allowed() {
+        let value = run(r#"fn now():"#);
+        assert_eq!(value, Err(Compiler(CompilerErrorAtLine { error: ReservedFunctionName("now".to_string()), line: 1 })));
     }
 
     // #[test]

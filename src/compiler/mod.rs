@@ -46,10 +46,10 @@ pub fn map_underlying() -> fn(std::io::Error) -> TipiLangError {
 
 
 pub fn compile(src: &str) -> Result<HashMap<String, AsmChunk>, TipiLangError> {
-    let tokens = compiler::scan_pass::scan(src)?;
+    let tokens = scan_pass::scan(src)?;
     let mut asm_registry = HashMap::new();
     let mut symbol_table = HashMap::new();
-    let ast = compiler::ast_pass::compile(None, tokens, &mut symbol_table)?;
+    let ast = ast_pass::compile(None, tokens, &mut symbol_table)?;
     symbol_builder::build("", &ast, &mut symbol_table);
     assembly_pass::compile(None, &ast, &symbol_table, &mut asm_registry)?;
     Ok(asm_registry)
@@ -57,9 +57,9 @@ pub fn compile(src: &str) -> Result<HashMap<String, AsmChunk>, TipiLangError> {
 
 #[cfg(test)]
 pub(crate) fn run(src: &str) -> Result<crate::value::Value, TipiLangError> {
-    let tokens = compiler::scan_pass::scan(src)?;
+    let tokens = scan_pass::scan(src)?;
     let mut symbol_table = HashMap::new();
-    let ast = compiler::ast_pass::compile(None, tokens, &mut symbol_table)?;
+    let ast = ast_pass::compile(None, tokens, &mut symbol_table)?;
     symbol_builder::build("", &ast, &mut symbol_table);
     let mut asm_registry = HashMap::new();
     assembly_pass::compile(None, &ast, &symbol_table, &mut asm_registry)?;

@@ -14,14 +14,14 @@ pub enum TipiLangError {
 }
 
 #[derive(Error, Debug, PartialEq)]
-pub struct CompilerErrorAtLine{
+pub struct CompilerErrorAtLine {
     pub error: CompilerError,
-    pub line: usize
+    pub line: usize,
 }
 
 impl CompilerErrorAtLine {
-    pub(crate) fn raise(error:CompilerError, line: usize) -> Self{
-        Self {error, line}
+    pub(crate) fn raise(error: CompilerError, line: usize) -> Self {
+        Self { error, line }
     }
 }
 
@@ -70,7 +70,9 @@ pub enum CompilerError {
     #[error("Illegal argument: '{0}' cannot be indexed")]
     IllegalTypeToIndex(String),
     #[error("The number of of arguments for {0} is not correct. Should be {1}, got {2}")]
-    IllegalArgumentsException(String,usize,usize),
+    IllegalArgumentsException(String, usize, usize),
+    #[error("Function name {0} is a global function and cannot be used here.")]
+    ReservedFunctionName(String),
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -84,7 +86,7 @@ pub enum RuntimeError {
     #[error("Function {0} not found")]
     FunctionNotFound(String),
     #[error("The number of of arguments for {0} is not correct. Should be {1}, got {2}")]
-    IllegalArgumentsException(String,usize,usize),
+    IllegalArgumentsException(String, usize, usize),
     #[error("{0}")]
     IllegalArgumentException(String),
     #[error("Expected {0}")]

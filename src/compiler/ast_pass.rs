@@ -18,6 +18,7 @@ use crate::value::Value;
 use crate::{DATE_FORMAT_TIMEZONE, Expr, Stmt, SymbolTable};
 use log::debug;
 use std::collections::HashMap;
+use crate::builtins::globals::GLOBAL_FUNCTIONS;
 
 pub fn compile(
     path: Option<&str>,
@@ -235,6 +236,9 @@ impl AstCompiler {
 
     fn function_declaration(&mut self, symbol_table: &mut SymbolTable) -> Stmt {
         let name_token = self.consume(&Identifier, Expected("function name."))?;
+        if GLOBAL_FUNCTIONS.contains_key(name_token.lexeme.as_str()) {
+            return Err(self.raise(CompilerError::ReservedFunctionName(name_token.lexeme.clone())))
+        }
         self.consume(&LeftParen, Expected("'(' after function name."))?;
         let mut parameters = vec![];
         while !self.check(&RightParen) {
