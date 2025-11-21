@@ -1,5 +1,10 @@
+use crate::builtins::globals::GLOBAL_FUNCTIONS;
 use crate::builtins::lookup;
-use crate::compiler::assembly_pass::Op::{Add, And, Assign, BitAnd, BitOr, BitXor, Call, CallBuiltin, Constant, DefList, DefMap, Divide, Dup, Equal, Get, Goto, GotoIf, GotoIfNot, Greater, GreaterEqual, Less, LessEqual, ListGet, Multiply, Negate, Not, NotEqual, Or, Pop, Print, Return, Shr, Subtract};
+use crate::compiler::assembly_pass::Op::{
+    Add, And, Assign, BitAnd, BitOr, BitXor, Call, CallBuiltin, Constant, DefList, DefMap, Divide,
+    Dup, Equal, Get, Goto, GotoIf, GotoIfNot, Greater, GreaterEqual, Less, LessEqual, ListGet,
+    Multiply, Negate, Not, NotEqual, Or, Pop, Print, Return, Shr, Subtract,
+};
 use crate::compiler::ast_pass::Expression::NamedParameter;
 use crate::compiler::ast_pass::{Expression, Function, Parameter, Statement};
 use crate::compiler::tokens::TokenType;
@@ -221,7 +226,7 @@ impl AsmPass {
                 self.emit(Pop);
                 self.compile_statements(then_branch, symbols, registry, namespace)?;
                 self.emit(Goto(0));
-                let goto_addr2 = self.chunk.code.len() - 1;// placeholder
+                let goto_addr2 = self.chunk.code.len() - 1; // placeholder
                 self.chunk.code[goto_addr1] = GotoIfNot(self.chunk.code.len());
                 if else_branch.is_some() {
                     self.compile_statements(
@@ -231,7 +236,7 @@ impl AsmPass {
                         namespace,
                     )?;
                 }
-                self.chunk.code[goto_addr2]= Op::Goto(self.chunk.code.len());
+                self.chunk.code[goto_addr2] = Op::Goto(self.chunk.code.len());
             }
             Statement::ForStatement {
                 loop_var,
@@ -291,17 +296,24 @@ impl AsmPass {
                             namespace, symbols, registry, arguments, parameters,
                         )?;
 
-                        self.emit(Call(name_index,arguments.len()));
+                        self.emit(Call(name_index, arguments.len()));
                     }
                     // constructor function
                     Some(Symbol::Object { fields, .. }) => {
                         self.get_arguments_in_order(
                             namespace, symbols, registry, arguments, fields,
                         )?;
-                        self.emit(Call(name_index,arguments.len()));
+                        self.emit(Call(name_index, arguments.len()));
                     }
+                    // maybe global function
                     _ => {
-                        return Err(self.raise(CompilerError::FunctionNotFound(name.to_string())));
+                        if let Some(fun) = GLOBAL_FUNCTIONS.get(name) {
+                            self.emit(Call(name_index, fun.arity()));
+                        } else {
+                            return Err(
+                                self.raise(CompilerError::FunctionNotFound(name.to_string()))
+                            );
+                        }
                     }
                 }
             }
@@ -338,11 +350,7 @@ impl AsmPass {
                     arguments,
                     &signature.parameters,
                 )?;
-                self.emit(CallBuiltin(
-                    name_index,
-                    type_index,
-                    arguments.len(),
-                ));
+                self.emit(CallBuiltin(name_index, type_index, arguments.len()));
             }
             Expression::Variable { name, .. } => {
                 let name_index = self.vars.get(name);
@@ -513,7 +521,7 @@ pub enum Op {
     Negate,
     Print,
     Return,
-    Call(usize,usize),
+    Call(usize, usize),
     And,
     Or,
     Not,

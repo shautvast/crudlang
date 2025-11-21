@@ -1,11 +1,6 @@
 use crate::compiler::ast_pass::Expression::{
     Assignment, FieldGet, FunctionCall, ListGet, MapGet, MethodCall, NamedParameter, Stop, Variable,
 };
-use crate::errors::CompilerError::{
-    self, Expected, ParseError, TooManyParameters, UnexpectedIndent, UninitializedVariable,
-};
-use crate::errors::CompilerErrorAtLine;
-use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::compiler::tokens::TokenType::{
     Bang, Bool, Char, Colon, DateTime, Dot, Else, Eof, Eol, Equal, False, FloatingPoint, Fn, For,
     Greater, GreaterEqual, GreaterGreater, Identifier, If, In, Indent, Integer, LeftBrace,
@@ -14,8 +9,13 @@ use crate::compiler::tokens::TokenType::{
     True, U32, U64, Unknown,
 };
 use crate::compiler::tokens::{Token, TokenType};
+use crate::errors::CompilerError::{
+    self, Expected, ParseError, TooManyParameters, UnexpectedIndent, UninitializedVariable,
+};
+use crate::errors::CompilerErrorAtLine;
+use crate::symbol_builder::{Symbol, calculate_type, infer_type};
 use crate::value::Value;
-use crate::{Expr, Stmt, SymbolTable};
+use crate::{DATE_FORMAT_TIMEZONE, Expr, Stmt, SymbolTable};
 use log::debug;
 use std::collections::HashMap;
 
@@ -663,12 +663,9 @@ impl AstCompiler {
                 line: self.peek().line,
                 literaltype: DateTime,
                 value: Value::DateTime(Box::new(
-                    chrono::DateTime::parse_from_str(
-                        &self.previous().lexeme,
-                        "%Y-%m-%d %H:%M:%S%.3f %z",
-                    )
-                    .map_err(|_| self.raise(ParseError(self.previous().lexeme.clone())))?
-                    .into(),
+                    chrono::DateTime::parse_from_str(&self.previous().lexeme, DATE_FORMAT_TIMEZONE)
+                        .map_err(|_| self.raise(ParseError(self.previous().lexeme.clone())))?
+                        .into(),
                 )),
             }
         } else if self.match_token(&[LeftParen]) {

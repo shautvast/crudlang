@@ -1,5 +1,6 @@
 mod string;
 mod list;
+pub(crate) mod globals;
 
 use crate::builtins::string::string_functions;
 use crate::errors::{CompilerError, RuntimeError};
@@ -35,10 +36,12 @@ impl Signature {
 }
 
 pub(crate) type FunctionFn = fn(Value, Vec<Value>) -> Result<Value, RuntimeError>;
+/// maps function names to the signature
 pub(crate) type FunctionMap = HashMap<String, Signature>;
+/// maps receiver type name to a function map
 pub(crate) type FunctionTable = HashMap<String, FunctionMap>;
 
-static METHODS: LazyLock<FunctionTable> = LazyLock::new(|| {
+static FUNCTIONS: LazyLock<FunctionTable> = LazyLock::new(|| {
     let mut table: FunctionTable = HashMap::new();
     table.insert("string".to_string(), string_functions());
     table.insert("list".to_string(), list_functions());
@@ -51,7 +54,7 @@ pub(crate) fn add(m: &mut FunctionMap, name: &str, method: Signature) {
 }
 
 pub(crate) fn lookup(type_name: &str, method_name: &str) -> Result<&'static Signature, CompilerError> {
-     METHODS
+     FUNCTIONS
         .get(type_name)
         .and_then(|methods| methods.get(method_name))
         .ok_or_else(|| CompilerError::FunctionNotFound(format!("{}.{}", type_name, method_name)))

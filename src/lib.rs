@@ -20,3 +20,4 @@ pub(crate) type Stmt = Result<Statement, CompilerErrorAtLine>;
 pub(crate) type AsmRegistry = HashMap<String, AsmChunk>;
 
 pub const TIPI_EXT: &str = ".tp";
+pub const DATE_FORMAT_TIMEZONE: &str = "%Y-%m-%d %H:%M:%S%.3f %z";

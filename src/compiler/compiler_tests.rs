@@ -1,12 +1,13 @@
 #[cfg(test)]
 mod tests {
+    use crate::compiler::{compile, run};
     use crate::errors::CompilerError::IllegalArgumentsException;
     use crate::errors::CompilerErrorAtLine;
-    use crate::errors::TipiLangError::{Compiler, Runtime};
     use crate::errors::RuntimeError::{IllegalArgumentException, IndexOutOfBounds};
+    use crate::errors::TipiLangError::{Compiler, Runtime};
     use crate::value::{Value, string};
     use chrono::DateTime;
-    use crate::compiler::{compile, run};
+    use crate::DATE_FORMAT_TIMEZONE;
 
     #[test]
     fn literal_int() {
@@ -241,8 +242,7 @@ m["name"]"#);
 date"#),
             Ok(Value::DateTime(Box::new(
                 DateTime::parse_from_str(
-                    "2025-11-09 16:44:28.000 +0100",
-                    "%Y-%m-%d %H:%M:%S%.3f %z"
+                    "2025-11-09 16:44:28.000 +0100", DATE_FORMAT_TIMEZONE
                 )
                 .unwrap()
                 .into()
@@ -391,7 +391,7 @@ else:
     }
 
     #[test]
-    fn inline_comment(){
+    fn inline_comment() {
         assert_eq!(run(r#"// this is a comment"#), Ok(Value::Void));
     }
 
@@ -406,6 +406,15 @@ sum
 "#),
             Ok(Value::I64(10))
         );
+    }
+
+    #[test]
+    fn global_function_call() {
+        let value = run(r#"now()"#);
+        assert!(value.is_ok());
+        let value = value.unwrap();
+        let date_time_string = value.to_string();
+        assert!(DateTime::parse_from_str(&date_time_string, DATE_FORMAT_TIMEZONE).is_ok());
     }
 
     // #[test]

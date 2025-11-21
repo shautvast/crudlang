@@ -1,12 +1,13 @@
+use crate::AsmRegistry;
+use crate::builtins::globals::GLOBAL_FUNCTIONS;
 use crate::compiler::assembly_pass::{AsmChunk, Op};
+use crate::compiler::tokens::TokenType;
 use crate::errors::{RuntimeError, ValueError};
 use crate::value::{Object, Value};
-use crate::{AsmRegistry};
 use arc_swap::Guard;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::debug;
-use crate::compiler::tokens::TokenType;
 
 pub async fn interpret_async(
     registry: Guard<Arc<HashMap<String, AsmChunk>>>,
@@ -60,7 +61,11 @@ impl Vm {
         }
     }
 
-    fn run_function(&mut self, chunk: &AsmChunk, mut args: Vec<Value>) -> Result<Value, RuntimeError> {
+    fn run_function(
+        &mut self,
+        chunk: &AsmChunk,
+        mut args: Vec<Value>,
+    ) -> Result<Value, RuntimeError> {
         // arguments -> locals
         for (_, name) in chunk.vars.iter() {
             self.local_vars.insert(name.clone(), args.remove(0));
@@ -130,7 +135,7 @@ impl Vm {
                     list.reverse();
                     self.push(Value::List(list));
                 }
-                Op::Assign(var_index) =>{
+                Op::Assign(var_index) => {
                     let (var_type, name) = chunk.vars.get(*var_index).unwrap();
                     let value = self.pop();
                     let value = number(var_type, value)?;
@@ -172,7 +177,9 @@ impl Vm {
                         crate::builtins::call(&receiver_type_name, &function_name, receiver, args)?;
                     self.push(return_value);
                 }
-                Op::Pop => {self.pop();}
+                Op::Pop => {
+                    self.pop();
+                }
                 Op::Call(function_name_index, num_args) => {
                     let mut args = vec![];
                     for _ in 0..*num_args {
@@ -182,38 +189,42 @@ impl Vm {
                     args.reverse();
 
                     let function_name = chunk.constants[*function_name_index].to_string();
-                    let function_chunk = self
-                        .registry
-                        .get(&function_name)
-                        .or_else(|| self.registry.get(&format!("{}/{}", context, function_name)));
-
-                    if function_chunk.is_none() {
-                        let constructor = chunk.object_defs.get(&function_name);
-
-                        if let Some(params) = constructor {
-                            if params.len() != args.len() {
-                                return Err(RuntimeError::IllegalArgumentsException(
-                                    function_name,
-                                    params.len(),
-                                    args.len(),
-                                ));
-                            }
-
-                            let mut fields = vec![];
-                            params.iter().zip(args).for_each(|(param, arg)| {
-                                fields.push((param.name.lexeme.clone(), arg))
-                            });
-                            let new_instance = Value::ObjectType(Box::new(Object {
-                                definition: function_name,
-                                fields,
-                            }));
-                            self.push(new_instance);
-                        } else {
-                            return Err(RuntimeError::FunctionNotFound(function_name));
-                        }
+                    if let Some(fun) = GLOBAL_FUNCTIONS.get(&function_name) {
+                        let return_value = (fun.function)(Value::Void, args)?;
+                        self.push(return_value);
                     } else {
-                        let result = interpret_function(function_chunk.unwrap(), args)?;
-                        self.push(result);
+                        let function_chunk = self.registry.get(&function_name).or_else(|| {
+                            self.registry.get(&format!("{}/{}", context, function_name))
+                        });
+
+                        if function_chunk.is_none() {
+                            let constructor = chunk.object_defs.get(&function_name);
+
+                            if let Some(params) = constructor {
+                                if params.len() != args.len() {
+                                    return Err(RuntimeError::IllegalArgumentsException(
+                                        function_name,
+                                        params.len(),
+                                        args.len(),
+                                    ));
+                                }
+
+                                let mut fields = vec![];
+                                params.iter().zip(args).for_each(|(param, arg)| {
+                                    fields.push((param.name.lexeme.clone(), arg))
+                                });
+                                let new_instance = Value::ObjectType(Box::new(Object {
+                                    definition: function_name,
+                                    fields,
+                                }));
+                                self.push(new_instance);
+                            } else {
+                                return Err(RuntimeError::FunctionNotFound(function_name));
+                            }
+                        } else {
+                            let result = interpret_function(function_chunk.unwrap(), args)?;
+                            self.push(result);
+                        }
                     }
                 }
                 Op::GotoIfNot(goto_addr) => {
@@ -231,7 +242,7 @@ impl Vm {
                 Op::Goto(goto_addr) => {
                     self.ip = *goto_addr;
                 }
-                Op::Dup =>{
+                Op::Dup => {
                     let value = self.pop();
                     self.push(value.clone());
                     self.push(value);

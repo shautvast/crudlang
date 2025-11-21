@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Neg, Not, Shl, Shr, Sub};
+use crate::DATE_FORMAT_TIMEZONE;
 
 #[derive(Debug, Clone)]
 pub struct Object {
@@ -186,7 +187,7 @@ impl Display for Value {
             Value::F32(v) => write!(f, "{}", v),
             Value::F64(v) => write!(f, "{}", v),
             Value::Char(v) => write!(f, "{}", v),
-            Value::DateTime(v) => write!(f, "{}", v),
+            Value::DateTime(v) => write!(f, "{}", v.format(DATE_FORMAT_TIMEZONE)),
             Value::Enum => write!(f, "enum"),
             Value::ObjectType(o) => write!(f, "{}: {:?}", o.definition, o.fields),
             Value::List(v) => write!(f, "{:?}", v),
