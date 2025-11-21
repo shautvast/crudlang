@@ -32,7 +32,7 @@ Borrowing from that: 'the place where http lives'.
 - Therefore, services cannot call other services, because that is the recipe for spaghetti. Refactor your logic, abstract and put lower level code in utilities.
 - openapi support
 
-### An interpreter written in Rust.
+### An compiler/runtime written in Rust.
 I cherry picked things I like, mostly from rust and python. 
   - strictly typed
   - [] is a list

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use arc_swap::ArcSwap;
 use log::info;
-use tipi_lang::compiler::asm_pass::AsmChunk;
+use tipi_lang::compiler::assembly_pass::AsmChunk;
 use tipi_lang::compiler::{compile_sourcedir, map_underlying};
 
 /// A simple CLI tool to greet users

@@ -1,4 +1,4 @@
-use crate::compiler::asm_pass::AsmChunk;
+use crate::compiler::assembly_pass::AsmChunk;
 use crate::compiler::ast_pass::{Expression, Statement};
 use crate::errors::CompilerErrorAtLine;
 use crate::symbol_builder::Symbol;

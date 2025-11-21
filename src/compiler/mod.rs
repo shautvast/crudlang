@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use walkdir::WalkDir;
 use crate::{compiler, symbol_builder, AsmRegistry, TIPI_EXT};
-use crate::compiler::asm_pass::AsmChunk;
+use crate::compiler::assembly_pass::AsmChunk;
 use crate::errors::TipiLangError;
 use crate::errors::TipiLangError::Platform;
 
@@ -10,7 +10,7 @@ mod compiler_tests;
 pub mod scan_pass;
 pub mod ast_pass;
 pub mod tokens;
-pub mod asm_pass;
+pub mod assembly_pass;
 
 pub fn compile_sourcedir(source_dir: &str) -> Result<HashMap<String, AsmChunk>, TipiLangError> {
     let mut asm_registry = AsmRegistry::new();
@@ -27,7 +27,7 @@ pub fn compile_sourcedir(source_dir: &str) -> Result<HashMap<String, AsmChunk>, 
                     let path = path.strip_prefix(source_dir).unwrap().replace(TIPI_EXT, "");
 
                     symbol_builder::build(&path, &statements, &mut symbol_table);
-                    asm_pass::compile(Some(&path), &statements, &symbol_table, &mut asm_registry)?;
+                    assembly_pass::compile(Some(&path), &statements, &symbol_table, &mut asm_registry)?;
                 }
                 Err(e) => {
                     println!("{}", e);
@@ -51,7 +51,7 @@ pub fn compile(src: &str) -> Result<HashMap<String, AsmChunk>, TipiLangError> {
     let mut symbol_table = HashMap::new();
     let ast = compiler::ast_pass::compile(None, tokens, &mut symbol_table)?;
     symbol_builder::build("", &ast, &mut symbol_table);
-    asm_pass::compile(None, &ast, &symbol_table, &mut asm_registry)?;
+    assembly_pass::compile(None, &ast, &symbol_table, &mut asm_registry)?;
     Ok(asm_registry)
 }
 
@@ -62,7 +62,7 @@ pub(crate) fn run(src: &str) -> Result<crate::value::Value, TipiLangError> {
     let ast = compiler::ast_pass::compile(None, tokens, &mut symbol_table)?;
     symbol_builder::build("", &ast, &mut symbol_table);
     let mut asm_registry = HashMap::new();
-    asm_pass::compile(None, &ast, &symbol_table, &mut asm_registry)?;
+    assembly_pass::compile(None, &ast, &symbol_table, &mut asm_registry)?;
     let registry = arc_swap::ArcSwap::from(std::sync::Arc::new(asm_registry));
     crate::vm::interpret(registry.load(), "main").map_err(TipiLangError::from)
 }

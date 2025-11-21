@@ -1,6 +1,6 @@
-use crate::compiler::asm_pass::AsmChunk;
+use crate::compiler::assembly_pass::AsmChunk;
 use crate::compiler::scan_pass::scan;
-use crate::compiler::{asm_pass, ast_pass, map_underlying};
+use crate::compiler::{assembly_pass, ast_pass, map_underlying};
 use crate::errors::TipiLangError;
 use crate::symbol_builder;
 use crate::vm::Vm;
@@ -16,7 +16,7 @@ pub fn start(registry: Arc<ArcSwap<HashMap<String, AsmChunk>>>) -> Result<(), Ti
     println!(":h for help");
     let mut symbol_table = HashMap::new();
     let mut vm = Vm::new(&registry.load());
-    let mut asm_pass = asm_pass::AsmPass::new("main");
+    let mut asm_pass = assembly_pass::AsmPass::new("main");
     loop {
         print!(">");
         io::stdout().flush().map_err(map_underlying())?;

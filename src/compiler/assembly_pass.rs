@@ -1,5 +1,5 @@
 use crate::builtins::lookup;
-use crate::compiler::asm_pass::Op::{Add, And, Assign, BitAnd, BitOr, BitXor, Call, CallBuiltin, Constant, DefList, DefMap, Divide, Dup, Equal, Get, Goto, GotoIf, GotoIfNot, Greater, GreaterEqual, Less, LessEqual, ListGet, Multiply, Negate, Not, NotEqual, Or, Pop, Print, Return, Shr, Subtract};
+use crate::compiler::assembly_pass::Op::{Add, And, Assign, BitAnd, BitOr, BitXor, Call, CallBuiltin, Constant, DefList, DefMap, Divide, Dup, Equal, Get, Goto, GotoIf, GotoIfNot, Greater, GreaterEqual, Less, LessEqual, ListGet, Multiply, Negate, Not, NotEqual, Or, Pop, Print, Return, Shr, Subtract};
 use crate::compiler::ast_pass::Expression::NamedParameter;
 use crate::compiler::ast_pass::{Expression, Function, Parameter, Statement};
 use crate::compiler::tokens::TokenType;

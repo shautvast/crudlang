@@ -1,4 +1,4 @@
-use crate::compiler::asm_pass::{AsmChunk, Op};
+use crate::compiler::assembly_pass::{AsmChunk, Op};
 use crate::errors::{RuntimeError, ValueError};
 use crate::value::{Object, Value};
 use crate::{AsmRegistry};
