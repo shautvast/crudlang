@@ -3,7 +3,7 @@ use std::fmt::Display;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
-pub enum CrudLangError {
+pub enum TipiLangError {
     #[error("Compilation failed: {0}")]
     Compiler(#[from] CompilerErrorAtLine),
 
@@ -61,7 +61,7 @@ pub enum CompilerError {
     UnexpectedType(TokenType),
     #[error("'{0}' is a keyword. You cannot use it as an identifier")]
     KeywordNotAllowedAsIdentifier(TokenType),
-    #[error("Crud does not support numbers above 2^64")]
+    #[error("Tipi does not support numbers above 2^64")]
     Overflow,
     #[error("Undeclared function: '{0}'")]
     FunctionNotFound(String),

@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let app = Router::new()
-        .route("/api/customers/{id}", get(get_customer))
+        .route("/api/customers.tp/{id}", get(get_customer))
         .with_state(state);
 
     // run our app with hyper, listening globally on port 3000
@@ -53,7 +53,7 @@ async fn get_customer(
     let rows = state
         .db
         .query(
-            "SELECT id, first_name, last_name FROM customers WHERE id = $1",
+            "SELECT id, first_name, last_name FROM customers.tp WHERE id = $1",
             &[&id],
         )
         .await

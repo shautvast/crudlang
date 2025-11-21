@@ -1,7 +1,7 @@
 use crate::compiler::asm_pass::AsmChunk;
 use crate::compiler::scan_pass::scan;
 use crate::compiler::{asm_pass, ast_pass, map_underlying};
-use crate::errors::CrudLangError;
+use crate::errors::TipiLangError;
 use crate::symbol_builder;
 use crate::vm::Vm;
 use arc_swap::ArcSwap;
@@ -11,7 +11,7 @@ use std::io::Write;
 use std::ops::Deref;
 use std::sync::Arc;
 
-pub fn start(registry: Arc<ArcSwap<HashMap<String, AsmChunk>>>) -> Result<(), CrudLangError> {
+pub fn start(registry: Arc<ArcSwap<HashMap<String, AsmChunk>>>) -> Result<(), TipiLangError> {
     println!("REPL started -- Type ctrl-c to exit (both the repl and the server)");
     println!(":h for help");
     let mut symbol_table = HashMap::new();

@@ -3,7 +3,7 @@ use axum::http::StatusCode;
 use axum::routing::any;
 use axum::{Json, Router};
 use clap::Parser;
-use tipi_lang::errors::CrudLangError;
+use tipi_lang::errors::TipiLangError;
 use tipi_lang::vm::interpret_async;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,8 +26,8 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), CrudLangError> {
-    println!("-- Crudlang --");
+async fn main() -> Result<(), TipiLangError> {
+    println!("-- Tipilang --");
     tracing_subscriber::fmt::init();
     let args = Args::parse();
     let source = args.source.unwrap_or("./source".to_string());

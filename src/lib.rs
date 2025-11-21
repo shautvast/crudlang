@@ -18,3 +18,5 @@ pub(crate) type SymbolTable = HashMap<String, Symbol>;
 pub(crate) type Expr = Result<Expression, CompilerErrorAtLine>;
 pub(crate) type Stmt = Result<Statement, CompilerErrorAtLine>;
 pub(crate) type AsmRegistry = HashMap<String, AsmChunk>;
+
+pub const TIPI_EXT: &str = ".tp";

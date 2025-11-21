@@ -2,7 +2,7 @@
 mod tests {
     use crate::errors::CompilerError::IllegalArgumentsException;
     use crate::errors::CompilerErrorAtLine;
-    use crate::errors::CrudLangError::{Compiler, Runtime};
+    use crate::errors::TipiLangError::{Compiler, Runtime};
     use crate::errors::RuntimeError::{IllegalArgumentException, IndexOutOfBounds};
     use crate::value::{Value, string};
     use chrono::DateTime;
